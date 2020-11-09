@@ -2,25 +2,43 @@ from typing import Any, List, Optional
 from pydantic import BaseModel
 
 
-class ErrorResponse(BaseModel):
-    type: Optional[str]
-    message: Optional[str]
-    code: Optional[str]
-    event_id: Optional[str]
-    details: Optional[Any]
+class Error(BaseModel):
+    type: Optional[str] = None
+    message: Optional[str] = None
+    code: Optional[str] = None
+    event_id: Optional[str] = None
+    details: Optional[Any] = None
 
 
-class WarningResponse(BaseModel):
+class Warn(BaseModel):
     pass
 
 
-class DeprecationResponse(ErrorResponse):
+class Deprecation(BaseModel):
     pass
 
 
 class Response(BaseModel):
-    data: Optional[Any]
-    meta: Optional[Any]
-    error: Optional[ErrorResponse]
-    warnings: Optional[List[WarningResponse]]
-    deprecations: Optional[List[DeprecationResponse]]
+    data: Optional[Any] = None
+    meta: Optional[Any] = None
+    warnings: Optional[List[Warn]] = None
+    deprecations: Optional[List[Deprecation]] = None
+
+    @classmethod
+    def wraps(cls, data: BaseModel, meta: Optional[BaseModel] = None):
+        response_model = type(f'{data.__name__}Response', (Response,), {})
+
+        def modify_pydantic_validators(field, new_type):
+            response_model.__dict__['__fields__'][field].type_ = new_type
+            response_model.__dict__['__fields__'][field].allow_none = False
+            response_model.__dict__['__fields__'][field].required = True
+
+        modify_pydantic_validators('data', data)
+        if meta:
+            modify_pydantic_validators('meta', meta)
+
+        return response_model
+
+
+class ErrorResponse(Response):
+    error: Optional[Error] = None

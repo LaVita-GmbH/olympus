@@ -1,1 +1,1 @@
-from .response import ErrorResponse, WarningResponse, DeprecationResponse, Response
+from .response import Error, Warn, Deprecation, Response, ErrorResponse
