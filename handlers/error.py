@@ -1,4 +1,5 @@
 import typing
+from jose.exceptions import JOSEError
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -35,10 +36,25 @@ async def respond_with_error(request: Request, error: schemas.Error, status_code
 
 
 async def object_does_not_exist_handler(request: Request, exc: ObjectDoesNotExist):
-    return await respond_with_error(request, schemas.Error(
-        type='ObjectDoesNotExist',
-        message=str(exc),
-    ))
+    return await respond_with_error(
+        request,
+        schemas.Error(
+            type='ObjectDoesNotExist',
+            message=str(exc),
+        ),
+        status_code=404,
+    )
+
+
+async def jose_error_handler(request: Request, exc: JOSEError):
+    return await respond_with_error(
+        request,
+        schemas.Error(
+            type=exc.__class__.__name__,
+            message=str(exc),
+        ),
+        status_code=401,
+    )
 
 
 async def generic_exception_handler(request: Request, exc: Exception):

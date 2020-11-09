@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Error(BaseModel):
@@ -21,8 +21,8 @@ class Deprecation(BaseModel):
 class Response(BaseModel):
     data: Optional[Any] = None
     meta: Optional[Any] = None
-    warnings: Optional[List[Warn]] = None
-    deprecations: Optional[List[Deprecation]] = None
+    warnings: Optional[List[Warn]] = Field(None, nullable=True)
+    deprecations: Optional[List[Deprecation]] = Field(None, nullable=True)
 
     @classmethod
     def wraps(cls, data: BaseModel, meta: Optional[BaseModel] = None):

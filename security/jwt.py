@@ -25,20 +25,16 @@ class JWTToken(APIKeyHeader):
         super().__init__(name=name, scheme_name=scheme_name, auto_error=auto_error)
 
     def decode_token(self, token, audience=None):
-        try:
-            return jwt.decode(
-                token=token,
-                key=self.key,
-                algorithms=self.algorithms,
-                issuer=self.issuer,
-                audience=audience,
-                options={
-                    'verify_aud': bool(audience),
-                },
-            )
-
-        except jwt.JWTClaimsError as error:
-            raise HTTPException(status_code=401, detail=str(error)) from error
+        return jwt.decode(
+            token=token,
+            key=self.key,
+            algorithms=self.algorithms,
+            issuer=self.issuer,
+            audience=audience,
+            options={
+                'verify_aud': bool(audience),
+            },
+        )
 
     async def __call__(self, request: Request, scopes: SecurityScopes = None) -> Optional[dict]:
         token = await super().__call__(request)
