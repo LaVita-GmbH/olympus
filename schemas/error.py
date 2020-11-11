@@ -7,4 +7,4 @@ class Error(BaseModel):
     message: Optional[str] = None
     code: Optional[str] = None
     event_id: Optional[str] = None
-    details: Optional[Any] = None
+    detail: Optional[Any] = None

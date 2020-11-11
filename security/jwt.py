@@ -1,9 +1,11 @@
 from typing import List, Optional, Tuple
 from jose import jwt
+from pydantic import BaseModel
 from fastapi import Depends, HTTPException
 from fastapi.security import SecurityScopes
 from fastapi.security.api_key import APIKeyHeader
 from starlette.requests import Request
+from ..schemas import Error
 
 
 def has_audience(token: dict, audiences: List[str]) -> Optional[str]:
@@ -12,6 +14,26 @@ def has_audience(token: dict, audiences: List[str]) -> Optional[str]:
             return audience
 
     return
+
+
+class Scope(BaseModel):
+    service: str
+    resource: str
+    action: str
+    selector: Optional[str] = None
+
+    @classmethod
+    def from_str(cls, scope: str):
+        scopes = scope.split('.') + [None]
+        return cls(
+            service=scopes[0],
+            resource=scopes[1],
+            action=scopes[2],
+            selector=scopes[3],
+        )
+
+    def __str__(self):
+        return '.'.join(filter(lambda s: s, [self.service, self.resource, self.action, self.selector,]))
 
 
 class JWTToken(APIKeyHeader):
@@ -46,8 +68,13 @@ class JWTToken(APIKeyHeader):
         if scopes:
             audience = has_audience(token_decoded, scopes.scopes)
             if not audience:
-                raise HTTPException(status_code=403)
+                raise HTTPException(status_code=403, detail=Error(
+                    type='JWTClaimsError',
+                    code='required_audience_missing',
+                    message='The required scope is not included in the given token.',
+                    detail=scopes.scopes,
+                ))
 
-            token_decoded['aud_used'] = audience
+            token_decoded['scope'] = Scope.from_str(audience)
 
         return token_decoded
