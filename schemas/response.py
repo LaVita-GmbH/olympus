@@ -2,6 +2,9 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 
+_wrapped_models = {}
+
+
 class Error(BaseModel):
     type: Optional[str] = None
     message: Optional[str] = None
@@ -26,7 +29,10 @@ class Response(BaseModel):
 
     @classmethod
     def wraps(cls, data: BaseModel, meta: Optional[BaseModel] = None):
-        response_model = type(f'{data.__name__}Response', (Response,), {})
+        if data not in _wrapped_models:
+            _wrapped_models[data] = type(f'{data.__name__}Response', (Response,), {})
+
+        response_model = _wrapped_models[data]
 
         def modify_pydantic_validators(field, new_type):
             response_model.__dict__['__fields__'][field].type_ = new_type
