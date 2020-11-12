@@ -1,39 +1,10 @@
 from typing import List, Optional, Tuple
 from jose import jwt
-from pydantic import BaseModel
-from fastapi import Depends, HTTPException
+from fastapi import HTTPException
 from fastapi.security import SecurityScopes
 from fastapi.security.api_key import APIKeyHeader
 from starlette.requests import Request
-from ..schemas import Error
-
-
-def has_audience(token: dict, audiences: List[str]) -> Optional[str]:
-    for audience in audiences:
-        if audience in token['aud']:
-            return audience
-
-    return
-
-
-class Scope(BaseModel):
-    service: str
-    resource: str
-    action: str
-    selector: Optional[str] = None
-
-    @classmethod
-    def from_str(cls, scope: str):
-        scopes = scope.split('.') + [None]
-        return cls(
-            service=scopes[0],
-            resource=scopes[1],
-            action=scopes[2],
-            selector=scopes[3],
-        )
-
-    def __str__(self):
-        return '.'.join(filter(lambda s: s, [self.service, self.resource, self.action, self.selector,]))
+from ..schemas import Error, Access, AccessToken, AccessScope
 
 
 class JWTToken(APIKeyHeader):
@@ -58,15 +29,17 @@ class JWTToken(APIKeyHeader):
             },
         )
 
-    async def __call__(self, request: Request, scopes: SecurityScopes = None) -> Optional[dict]:
+    async def __call__(self, request: Request, scopes: SecurityScopes = None) -> Optional[Access]:
         token = await super().__call__(request)
         if not token:
             return
 
-        token_decoded = self.decode_token(token)
+        access = Access(
+            token=AccessToken(**self.decode_token(token)),
+        )
 
         if scopes:
-            audience = has_audience(token_decoded, scopes.scopes)
+            audience = access.token.has_audience(scopes.scopes)
             if not audience:
                 raise HTTPException(status_code=403, detail=Error(
                     type='JWTClaimsError',
@@ -75,6 +48,6 @@ class JWTToken(APIKeyHeader):
                     detail=scopes.scopes,
                 ))
 
-            token_decoded['scope'] = Scope.from_str(audience)
+            access.scope = AccessScope.from_str(audience)
 
-        return token_decoded
+        return access
