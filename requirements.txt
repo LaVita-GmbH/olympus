@@ -1,4 +1,3 @@
 python-jose[cryptography]
-sentry-asgi
 sentry-sdk
 django
