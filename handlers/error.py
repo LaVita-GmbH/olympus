@@ -44,7 +44,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         request,
         content,
         status_code=exc.status_code,
-        headers=getattr(exc, 'headers'),
+        headers=getattr(exc, 'headers', None),
     )
 
 
