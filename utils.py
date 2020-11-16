@@ -1,7 +1,8 @@
 import os
-from typing import Type
+from typing import Optional, Type
 from pydantic import BaseModel
 from django.db import models
+from pydantic.fields import ModelField
 
 
 def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
@@ -24,20 +25,36 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
         name: str = Field(orm_field=Address.name)
     ```
     """
+    def populate_none(pydantic_cls, django_obj):
+        for key, field in pydantic_cls.__fields__.items():
+            if issubclass(field.type_, BaseModel):
+                populate_none(field.type_, django_obj)
+
+            else:
+                orm_field = field.field_info.extra.get('orm_field')
+                setattr(django_obj, orm_field.field.attname, None)
+
     for key, field in pydantic_obj.fields.items():
-        py_field = getattr(pydantic_obj, field.name)
-        if isinstance(py_field, BaseModel):
-            transfer_to_orm(pydantic_obj=py_field, django_obj=django_obj)
+        value = getattr(pydantic_obj, field.name)
+        if issubclass(field.type_, BaseModel):
+            if value is None:
+                populate_none(field.type_, django_obj)
+
+            else:
+                transfer_to_orm(pydantic_obj=value, django_obj=django_obj)
 
         else:
             orm_field = field.field_info.extra.get('orm_field')
             if not orm_field:
                 raise AttributeError("orm_field not found on %r" % field)
 
-            setattr(django_obj, orm_field.field.attname, py_field)
+            if orm_field.field.is_relation and isinstance(value, models.Model):
+                value = value.pk
+
+            setattr(django_obj, orm_field.field.attname, value)
 
 
-def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model) -> BaseModel:
+def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model, pydantic_field_on_parent: Optional[ModelField] = None) -> BaseModel:
     """
     Transfers the field contents of django_obj to a new instance of pydantic_cls.
     For this to work it is required to have orm_field set on all of the pydantic_obj's fields, which has to point to the django model attribute.
@@ -60,16 +77,20 @@ def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model) -
     values = {}
     for key, field in pydantic_cls.__fields__.items():
         if issubclass(field.type_, BaseModel):
-            values[field.name] = transfer_from_orm(pydantic_cls=field.type_, django_obj=django_obj)
+            values[field.name] = transfer_from_orm(pydantic_cls=field.type_, django_obj=django_obj, pydantic_field_on_parent=field)
 
         else:
             orm_field = field.field_info.extra.get('orm_field')
             if not orm_field:
                 raise AttributeError("orm_field not found on %r" % field)
 
-            values[field.name] = getattr(django_obj, orm_field.field.attname)
+            value = getattr(django_obj, orm_field.field.attname)
+            if field.required and pydantic_field_on_parent and pydantic_field_on_parent.allow_none and value is None:
+                return None
 
-    return pydantic_cls(**values)
+            values[field.name] = value
+
+    return pydantic_cls.construct(**values)
 
 
 class DjangoAllowAsyncUnsafe:
