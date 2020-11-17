@@ -46,6 +46,10 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
         else:
             orm_field = field.field_info.extra.get('orm_field')
             if not orm_field:
+                if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
+                    # Do not raise error when orm_field was explicitly set to None
+                    continue
+
                 raise AttributeError("orm_field not found on %r" % field)
 
             if orm_field.field.is_relation and isinstance(value, models.Model):
@@ -82,6 +86,10 @@ def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model, p
         else:
             orm_field = field.field_info.extra.get('orm_field')
             if not orm_field:
+                if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
+                    # Do not raise error when orm_field was explicitly set to None
+                    continue
+
                 raise AttributeError("orm_field not found on %r" % field)
 
             value = getattr(django_obj, orm_field.field.attname)
