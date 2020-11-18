@@ -1,7 +1,9 @@
 import os
 from typing import Optional, Type
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, validate_model
 from django.db import models
+from pydantic.error_wrappers import ErrorWrapper, ValidationError
 from pydantic.fields import ModelField
 
 
@@ -99,6 +101,37 @@ def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model, p
             values[field.name] = value
 
     return pydantic_cls.construct(**values)
+
+
+async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseModel) -> BaseModel:
+    data = await model.from_orm(orm_obj)
+    input_dict: dict = input.dict(exclude_unset=True)
+
+    def update(model, input):
+        for key, value in input.items():
+            if isinstance(value, dict):
+                update(getattr(model, key), value)
+
+            else:
+                setattr(model, key, value)
+
+    update(data, input_dict)
+
+    values, fields_set, validation_error = validate_model(model, data.dict())
+    if validation_error:
+        raise RequestValidationError(validation_error.raw_errors)
+
+    transfer_to_orm(data, orm_obj)
+    return data
+
+
+def validate_object(obj: BaseModel, is_request: bool = True):
+    *_, validation_error = validate_model(obj.__class__, obj.__dict__)
+    if validation_error:
+        if is_request:
+            raise RequestValidationError(validation_error.raw_errors)
+
+        raise validation_error
 
 
 class DjangoAllowAsyncUnsafe:

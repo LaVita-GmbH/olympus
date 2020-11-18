@@ -6,6 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.utils import IntegrityError
 
 try:
     import sentry_sdk
@@ -40,6 +41,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             message=content,
         )
 
+    if isinstance(content, schemas.Error) and not content.type:
+        content.type = exc.__class__.__name__
+
     return await respond_details(
         request,
         content,
@@ -56,6 +60,16 @@ async def object_does_not_exist_handler(request: Request, exc: ObjectDoesNotExis
             message=str(exc),
         ),
         status_code=404,
+    )
+
+
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    return await respond_details(
+        request,
+        schemas.Error(
+            type=exc.__class__.__name__,
+        ),
+        status_code=420,
     )
 
 
