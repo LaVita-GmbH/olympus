@@ -1,10 +1,12 @@
 import os
-from typing import Optional, Type
+from typing import List, Optional, Type
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model
 from django.db import models
 from pydantic.error_wrappers import ErrorWrapper, ValidationError
 from pydantic.fields import ModelField
+from .schemas import Access, Error
+from .exceptions import AccessError
 
 
 def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
@@ -103,11 +105,56 @@ def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model, p
     return pydantic_cls.construct(**values)
 
 
-async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseModel) -> BaseModel:
+def check_field_access(input: BaseModel, access: Access):
+    """
+    Check access to fields.
+
+    To define scopes of a field, add a list of scopes to the Field defenition in the kwarg scopes.
+
+    Example:
+    ```python
+    from pydantic import BaseModel, Field
+
+    class AddressRequest(BaseModel):
+        name: str = Field(scopes=['elysium.addresses.edit.any',])
+    ```
+    """
+    def check(model: BaseModel, input: dict, access: Access, loc: Optional[List[str]] = None):
+        if not loc:
+            loc = ['body',]
+
+        for key, value in input.items():
+            if isinstance(value, dict):
+                check(getattr(model, key), value, access, loc=loc + [key])
+
+            else:
+                scopes = model.fields[key].field_info.extra.get('scopes')
+                if not scopes:
+                    continue
+
+                if not access.token.has_audience(scopes):
+                    raise AccessError(detail=Error(
+                        type='FieldAccessError',
+                        code='access_error.field',
+                        detail={
+                            'loc': loc + [key],
+                        },
+                    ))
+
+    check(input, input.dict(exclude_unset=True), access)
+
+
+async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseModel, *, access: Optional[Access]) -> BaseModel:
+    """
+    Apply (partial) changes given in `input` to an orm_obj and return an instance of `model` with the full data of the orm including the updated fields.
+    """
+    if access:
+        check_field_access(input, access)
+
     data = await model.from_orm(orm_obj)
     input_dict: dict = input.dict(exclude_unset=True)
 
-    def update(model, input):
+    def update(model: BaseModel, input: dict):
         for key, value in input.items():
             if isinstance(value, dict):
                 update(getattr(model, key), value)
