@@ -1,11 +1,12 @@
 import os
-from typing import List, Optional, Type
+from typing import List, Optional, Tuple, Type
+from fastapi import Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model
 from django.db import models
 from pydantic.error_wrappers import ErrorWrapper, ValidationError
 from pydantic.fields import ModelField
-from .schemas import Access, Error
+from .schemas import Access, Error, LimitOffset
 from .exceptions import AccessError
 
 
@@ -179,6 +180,16 @@ def validate_object(obj: BaseModel, is_request: bool = True):
             raise RequestValidationError(validation_error.raw_errors)
 
         raise validation_error
+
+
+def depends_limit_offset(max_limit: Optional[int] = 1000):
+    def get_limit_offset(limit: Optional[int] = Query(None, le=max_limit, ge=1), offset: Optional[int] = Query(None, ge=0)) -> LimitOffset:
+        return LimitOffset(
+            limit=limit,
+            offset=offset,
+        )
+
+    return get_limit_offset
 
 
 class DjangoAllowAsyncUnsafe:
