@@ -182,6 +182,14 @@ def validate_object(obj: BaseModel, is_request: bool = True):
         raise validation_error
 
 
+def dict_remove_none(d):
+    if isinstance(d, dict):
+        return {key: dict_remove_none(value) for key, value in d.items() if value is not None}
+
+    else:
+        return d
+
+
 def depends_limit_offset(max_limit: Optional[int] = 1000):
     def get_limit_offset(limit: Optional[int] = Query(None, le=max_limit, ge=1), offset: Optional[int] = Query(None, ge=0)) -> LimitOffset:
         return LimitOffset(
