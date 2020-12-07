@@ -1,11 +1,13 @@
 import os
 from typing import List, Optional, Tuple, Type
+from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model
 from django.db import models
+from django.db.models.manager import Manager
 from pydantic.error_wrappers import ErrorWrapper, ValidationError
-from pydantic.fields import ModelField
+from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, SHAPE_SET
 from .schemas import Access, Error, LimitOffset
 from .exceptions import AccessError
 
@@ -63,7 +65,12 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
             setattr(django_obj, orm_field.field.attname, value)
 
 
-def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model, pydantic_field_on_parent: Optional[ModelField] = None) -> BaseModel:
+def transfer_from_orm(
+    pydantic_cls: Type[BaseModel],
+    django_obj: models.Model,
+    django_parent_obj: Optional[models.Model] = None,
+    pydantic_field_on_parent: Optional[ModelField] = None
+) -> BaseModel:
     """
     Transfers the field contents of django_obj to a new instance of pydantic_cls.
     For this to work it is required to have orm_field set on all of the pydantic_obj's fields, which has to point to the django model attribute.
@@ -85,19 +92,51 @@ def transfer_from_orm(pydantic_cls: Type[BaseModel], django_obj: models.Model, p
     """
     values = {}
     for key, field in pydantic_cls.__fields__.items():
-        if issubclass(field.type_, BaseModel):
+        orm_field = field.field_info.extra.get('orm_field')
+        if not orm_field:
+            if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
+                # Do not raise error when orm_field was explicitly set to None
+                continue
+
+            if not (field.shape == SHAPE_SINGLETON and issubclass(field.type_, BaseModel)):
+                raise AttributeError("orm_field not found on %r (parent: %r)" % (field, pydantic_field_on_parent))
+
+        if field.shape != SHAPE_SINGLETON:
+            if field.shape == SHAPE_LIST:
+                if isinstance(orm_field, ManyToManyDescriptor):
+                    relatedmanager = getattr(django_obj, orm_field.field.attname)
+                    related_objs = relatedmanager.through.objects.filter(**{relatedmanager.source_field_name: relatedmanager.instance})
+
+                elif isinstance(orm_field, ReverseManyToOneDescriptor):
+                    relatedmanager = getattr(django_obj, orm_field.rel.name)
+                    related_objs = relatedmanager.all()
+
+                else:
+                    raise NotImplementedError
+
+                values[field.name] = [
+                    transfer_from_orm(
+                        pydantic_cls=field.type_,
+                        django_obj=rel_obj,
+                        django_parent_obj=django_obj,
+                        pydantic_field_on_parent=field
+                    ) for rel_obj in related_objs
+                ]
+
+            else:
+                raise NotImplementedError
+
+        elif issubclass(field.type_, BaseModel):
             values[field.name] = transfer_from_orm(pydantic_cls=field.type_, django_obj=django_obj, pydantic_field_on_parent=field)
 
         else:
-            orm_field = field.field_info.extra.get('orm_field')
-            if not orm_field:
-                if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
-                    # Do not raise error when orm_field was explicitly set to None
-                    continue
+            value = None
+            try:
+                value = getattr(django_obj, orm_field.field.attname)
 
-                raise AttributeError("orm_field not found on %r" % field)
+            except AttributeError:
+                raise  # attach debugger here ;)
 
-            value = getattr(django_obj, orm_field.field.attname)
             if field.required and pydantic_field_on_parent and pydantic_field_on_parent.allow_none and value is None:
                 return None
 
