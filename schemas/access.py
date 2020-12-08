@@ -1,11 +1,16 @@
-from typing import Any, Optional, List
+from typing import Any, Optional, List, Set, Type
 from datetime import datetime
 from pydantic import BaseModel, Field
+
+
+class AccessScopes(set):
+    pass
 
 
 class Access(BaseModel):
     token: 'AccessToken'
     scope: Optional['AccessScope'] = None
+    scopes: Optional[Set['AccessScope']] = None
 
     user: Optional[Any] = None
 
@@ -35,6 +40,9 @@ class AccessToken(BaseModel):
 
         return
 
+    def has_audiences(self, audiences: List[str]) -> List[str]:
+        return set([audience for audience in audiences if audience in self.aud])
+
 
 class AccessScope(BaseModel):
     service: str
@@ -54,6 +62,9 @@ class AccessScope(BaseModel):
 
     def __str__(self):
         return '.'.join(filter(lambda s: s, [self.service, self.resource, self.action, self.selector,]))
+
+    def __hash__(self) -> int:
+        return hash(self.__str__())
 
 
 Access.update_forward_refs()

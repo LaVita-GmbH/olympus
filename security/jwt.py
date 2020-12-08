@@ -39,8 +39,8 @@ class JWTToken(APIKeyHeader):
         )
 
         if scopes:
-            audience = access.token.has_audience(scopes.scopes)
-            if not audience:
+            audiences = access.token.has_audiences(scopes.scopes)
+            if not audiences:
                 raise HTTPException(status_code=403, detail=Error(
                     type='JWTClaimsError',
                     code='required_audience_missing',
@@ -48,6 +48,8 @@ class JWTToken(APIKeyHeader):
                     detail=scopes.scopes,
                 ))
 
-            access.scope = AccessScope.from_str(audience)
+            aud_scopes = [AccessScope.from_str(audience) for audience in audiences]
+            access.scopes = set(aud_scopes)
+            access.scope = aud_scopes[0]
 
         return access

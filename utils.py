@@ -75,7 +75,7 @@ def transfer_from_orm(
     Transfers the field contents of django_obj to a new instance of pydantic_cls.
     For this to work it is required to have orm_field set on all of the pydantic_obj's fields, which has to point to the django model attribute.
 
-    It also works for nested pydantic models which point to a field on the **same** django model.
+    It also works for nested pydantic models which point to a field on the **same** django model and for related fields (m2o or m2m).
 
     Example:
 
