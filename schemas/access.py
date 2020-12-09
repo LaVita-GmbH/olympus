@@ -41,7 +41,7 @@ class AccessToken(BaseModel):
         return
 
     def has_audiences(self, audiences: List[str]) -> List[str]:
-        return set([audience for audience in audiences if audience in self.aud])
+        return [audience for audience in audiences if audience in self.aud]
 
 
 class AccessScope(BaseModel):

@@ -49,7 +49,7 @@ class JWTToken(APIKeyHeader):
                 ))
 
             aud_scopes = [AccessScope.from_str(audience) for audience in audiences]
-            access.scopes = set(aud_scopes)
+            access.scopes = aud_scopes
             access.scope = aud_scopes[0]
 
         return access
