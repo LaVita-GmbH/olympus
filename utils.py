@@ -157,7 +157,7 @@ def check_field_access(input: BaseModel, access: Access):
     from pydantic import BaseModel, Field
 
     class AddressRequest(BaseModel):
-        name: str = Field(scopes=['elysium.addresses.edit.any',])
+        name: str = Field(scopes=['elysium.addresses.update.any',])
     ```
     """
     def check(model: BaseModel, input: dict, access: Access, loc: Optional[List[str]] = None):
