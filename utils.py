@@ -1,11 +1,12 @@
 import os
 from typing import List, Optional, Tuple, Type
-from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
+from asgiref.sync import sync_to_async
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model
 from django.db import models
 from django.db.models.manager import Manager
+from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from pydantic.error_wrappers import ErrorWrapper, ValidationError
 from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, SHAPE_SET
 from .schemas import Access, Error, LimitOffset
@@ -252,3 +253,13 @@ class DjangoAllowAsyncUnsafe:
 
         else:
             os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = self._django_allow_async_unsafe_before
+
+
+class DjangoORMBaseModel(BaseModel):
+    @classmethod
+    @sync_to_async
+    def from_orm(cls, obj: models.Model):
+        return transfer_from_orm(cls, obj)
+
+    class Config:
+        orm_mode = True
