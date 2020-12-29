@@ -4,12 +4,10 @@ from datetime import datetime
 from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
+def default_eid():
+    return secrets.token_hex(32)
 
 class EventMetadata(BaseModel):
-    @staticmethod
-    def default_eid():
-        return secrets.token_hex(32)
-
     eid: str = Field(min_length=64, max_length=64, default_factory=default_eid)
     event_type: Optional[str]
     occurred_at: datetime = Field(default_factory=datetime.now)
@@ -21,7 +19,7 @@ class EventMetadata(BaseModel):
 
 
 class GeneralEvent(BaseModel):
-    metadata: EventMetadata
+    metadata: EventMetadata = Field(default_factory=EventMetadata)
 
 
 class DataChangeEvent(GeneralEvent):
