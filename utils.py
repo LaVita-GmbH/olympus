@@ -43,8 +43,21 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
                 setattr(django_obj, orm_field.field.attname, None)
 
     for key, field in pydantic_obj.fields.items():
+
+        orm_field = field.field_info.extra.get('orm_field')
+        if not orm_field:
+            if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
+                # Do not raise error when orm_field was explicitly set to None
+                continue
+
+            if not (field.shape == SHAPE_SINGLETON and issubclass(field.type_, BaseModel)):
+                raise AttributeError("orm_field not found on %r" % field)
+
         value = getattr(pydantic_obj, field.name)
-        if issubclass(field.type_, BaseModel):
+        if field.shape != SHAPE_SINGLETON:
+            raise NotImplementedError
+
+        elif issubclass(field.type_, BaseModel):
             if value is None:
                 populate_none(field.type_, django_obj)
 
@@ -52,14 +65,6 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
                 transfer_to_orm(pydantic_obj=value, django_obj=django_obj)
 
         else:
-            orm_field = field.field_info.extra.get('orm_field')
-            if not orm_field:
-                if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
-                    # Do not raise error when orm_field was explicitly set to None
-                    continue
-
-                raise AttributeError("orm_field not found on %r" % field)
-
             if orm_field.field.is_relation and isinstance(value, models.Model):
                 value = value.pk
 
