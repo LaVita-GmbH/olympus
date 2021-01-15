@@ -127,7 +127,7 @@ class Client:
             try:
                 return self._response.json()
 
-            except json.JSONDecodeError:
+            except ValueError as error:
                 return None
 
         def perform(self):

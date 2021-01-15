@@ -98,55 +98,60 @@ def transfer_from_orm(
     """
     values = {}
     for key, field in pydantic_cls.__fields__.items():
-        orm_field = field.field_info.extra.get('orm_field')
-        if not orm_field:
-            if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
-                # Do not raise error when orm_field was explicitly set to None
-                continue
+        orm_method = field.field_info.extra.get('orm_method')
+        if orm_method:
+            values[field.name] = orm_method(django_obj)
 
-            if not (field.shape == SHAPE_SINGLETON and issubclass(field.type_, BaseModel)):
-                raise AttributeError("orm_field not found on %r (parent: %r)" % (field, pydantic_field_on_parent))
+        else:
+            orm_field = field.field_info.extra.get('orm_field')
+            if not orm_field:
+                if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
+                    # Do not raise error when orm_field was explicitly set to None
+                    continue
 
-        if field.shape != SHAPE_SINGLETON:
-            if field.shape == SHAPE_LIST:
-                if isinstance(orm_field, ManyToManyDescriptor):
-                    relatedmanager = getattr(django_obj, orm_field.field.attname)
-                    related_objs = relatedmanager.through.objects.filter(**{relatedmanager.source_field_name: relatedmanager.instance})
+                if not (field.shape == SHAPE_SINGLETON and issubclass(field.type_, BaseModel)):
+                    raise AttributeError("orm_field not found on %r (parent: %r)" % (field, pydantic_field_on_parent))
 
-                elif isinstance(orm_field, ReverseManyToOneDescriptor):
-                    relatedmanager = getattr(django_obj, orm_field.rel.name)
-                    related_objs = relatedmanager.all()
+            if field.shape != SHAPE_SINGLETON:
+                if field.shape == SHAPE_LIST:
+                    if isinstance(orm_field, ManyToManyDescriptor):
+                        relatedmanager = getattr(django_obj, orm_field.field.attname)
+                        related_objs = relatedmanager.through.objects.filter(**{relatedmanager.source_field_name: relatedmanager.instance})
+
+                    elif isinstance(orm_field, ReverseManyToOneDescriptor):
+                        relatedmanager = getattr(django_obj, orm_field.rel.name)
+                        related_objs = relatedmanager.all()
+
+                    else:
+                        raise NotImplementedError
+
+                    values[field.name] = [
+                        transfer_from_orm(
+                            pydantic_cls=field.type_,
+                            django_obj=rel_obj,
+                            django_parent_obj=django_obj,
+                            pydantic_field_on_parent=field
+                        ) for rel_obj in related_objs
+                    ]
 
                 else:
                     raise NotImplementedError
 
-                values[field.name] = [
-                    transfer_from_orm(
-                        pydantic_cls=field.type_,
-                        django_obj=rel_obj,
-                        django_parent_obj=django_obj,
-                        pydantic_field_on_parent=field
-                    ) for rel_obj in related_objs
-                ]
+            elif issubclass(field.type_, BaseModel):
+                values[field.name] = transfer_from_orm(pydantic_cls=field.type_, django_obj=django_obj, pydantic_field_on_parent=field)
 
             else:
-                raise NotImplementedError
+                value = None
+                try:
+                    value = getattr(django_obj, orm_field.field.attname)
 
-        elif issubclass(field.type_, BaseModel):
-            values[field.name] = transfer_from_orm(pydantic_cls=field.type_, django_obj=django_obj, pydantic_field_on_parent=field)
+                except AttributeError:
+                    raise  # attach debugger here ;)
 
-        else:
-            value = None
-            try:
-                value = getattr(django_obj, orm_field.field.attname)
+                if field.required and pydantic_field_on_parent and pydantic_field_on_parent.allow_none and value is None:
+                    return None
 
-            except AttributeError:
-                raise  # attach debugger here ;)
-
-            if field.required and pydantic_field_on_parent and pydantic_field_on_parent.allow_none and value is None:
-                return None
-
-            values[field.name] = value
+                values[field.name] = value
 
     return pydantic_cls.construct(**values)
 
