@@ -9,8 +9,8 @@ from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from pydantic.error_wrappers import ErrorWrapper, ValidationError
 from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, SHAPE_SET
-from .schemas import Access, Error, LimitOffset
-from .exceptions import AccessError
+from ..schemas import Access, Error, LimitOffset
+from ..exceptions import AccessError
 
 
 def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
@@ -104,13 +104,12 @@ def transfer_from_orm(
 
         else:
             orm_field = field.field_info.extra.get('orm_field')
-            if not orm_field:
-                if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
-                    # Do not raise error when orm_field was explicitly set to None
-                    continue
+            if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
+                # Do not raise error when orm_field was explicitly set to None
+                continue
 
-                if not (field.shape == SHAPE_SINGLETON and issubclass(field.type_, BaseModel)):
-                    raise AttributeError("orm_field not found on %r (parent: %r)" % (field, pydantic_field_on_parent))
+            if not orm_field and not (field.shape == SHAPE_SINGLETON and issubclass(field.type_, BaseModel)):
+                raise AttributeError("orm_field not found on %r (parent: %r)" % (field, pydantic_field_on_parent))
 
             if field.shape != SHAPE_SINGLETON:
                 if field.shape == SHAPE_LIST:
@@ -137,7 +136,7 @@ def transfer_from_orm(
                 else:
                     raise NotImplementedError
 
-            elif issubclass(field.type_, BaseModel):
+            elif not orm_field and issubclass(field.type_, BaseModel):
                 values[field.name] = transfer_from_orm(pydantic_cls=field.type_, django_obj=django_obj, pydantic_field_on_parent=field)
 
             else:
@@ -230,39 +229,6 @@ def validate_object(obj: BaseModel, is_request: bool = True):
             raise RequestValidationError(validation_error.raw_errors)
 
         raise validation_error
-
-
-def dict_remove_none(d):
-    if isinstance(d, dict):
-        return {key: dict_remove_none(value) for key, value in d.items() if value is not None}
-
-    else:
-        return d
-
-
-def depends_limit_offset(max_limit: Optional[int] = 1000):
-    def get_limit_offset(limit: Optional[int] = Query(None, le=max_limit, ge=1), offset: Optional[int] = Query(None, ge=0)) -> LimitOffset:
-        return LimitOffset(
-            limit=limit or max_limit,
-            offset=offset or 0,
-        )
-
-    return get_limit_offset
-
-
-class DjangoAllowAsyncUnsafe:
-    def __init__(self):
-        self._django_allow_async_unsafe_before = os.environ.get('DJANGO_ALLOW_ASYNC_UNSAFE')
-
-    def __enter__(self):
-        os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = '1'
-
-    def __exit__(self, type, value, traceback):
-        if self._django_allow_async_unsafe_before is None:
-            del os.environ['DJANGO_ALLOW_ASYNC_UNSAFE']
-
-        else:
-            os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = self._django_allow_async_unsafe_before
 
 
 class DjangoORMBaseModel(BaseModel):
