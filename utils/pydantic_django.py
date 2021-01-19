@@ -1,5 +1,5 @@
-import os
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Type
+import json
 from asgiref.sync import sync_to_async
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
@@ -149,6 +149,9 @@ def transfer_from_orm(
 
                 if field.required and pydantic_field_on_parent and pydantic_field_on_parent.allow_none and value is None:
                     return None
+
+                if isinstance(orm_field.field, models.JSONField):
+                    value = json.loads(value)
 
                 values[field.name] = value
 
