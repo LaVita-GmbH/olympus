@@ -150,7 +150,7 @@ def transfer_from_orm(
                 if field.required and pydantic_field_on_parent and pydantic_field_on_parent.allow_none and value is None:
                     return None
 
-                if isinstance(orm_field.field, models.JSONField):
+                if isinstance(orm_field.field, models.JSONField) and value:
                     value = json.loads(value)
 
                 values[field.name] = value
