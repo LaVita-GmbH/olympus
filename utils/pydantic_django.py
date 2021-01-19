@@ -57,7 +57,7 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
         if field.shape != SHAPE_SINGLETON:
             raise NotImplementedError
 
-        elif issubclass(field.type_, BaseModel):
+        elif not orm_field and issubclass(field.type_, BaseModel):
             if value is None:
                 populate_none(field.type_, django_obj)
 
@@ -67,6 +67,9 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
         else:
             if orm_field.field.is_relation and isinstance(value, models.Model):
                 value = value.pk
+
+            if isinstance(orm_field.field, models.JSONField) and value:
+                    value = value.json()
 
             setattr(django_obj, orm_field.field.attname, value)
 
@@ -151,7 +154,7 @@ def transfer_from_orm(
                     return None
 
                 if isinstance(orm_field.field, models.JSONField) and value:
-                    value = json.loads(value)
+                    value = field.type_.parse_raw(value)
 
                 values[field.name] = value
 
@@ -210,7 +213,12 @@ async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseM
     def update(model: BaseModel, input: dict):
         for key, value in input.items():
             if isinstance(value, dict):
-                update(getattr(model, key), value)
+                attr = getattr(model, key)
+                if attr is None:
+                    setattr(model, key, model.__fields__[key].type_.parse_obj(value))
+
+                else:
+                    update(attr, value)
 
             else:
                 setattr(model, key, value)
