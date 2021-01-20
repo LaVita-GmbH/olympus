@@ -40,6 +40,7 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
 
             else:
                 orm_field = field.field_info.extra.get('orm_field')
+                assert orm_field, "orm_field not set on %r" % field
                 setattr(django_obj, orm_field.field.attname, None)
 
     for key, field in pydantic_obj.fields.items():
