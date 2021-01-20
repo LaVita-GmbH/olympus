@@ -35,11 +35,11 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
     """
     def populate_none(pydantic_cls, django_obj):
         for key, field in pydantic_cls.__fields__.items():
-            if issubclass(field.type_, BaseModel):
+            orm_field = field.field_info.extra.get('orm_field')
+            if not orm_field and issubclass(field.type_, BaseModel):
                 populate_none(field.type_, django_obj)
 
             else:
-                orm_field = field.field_info.extra.get('orm_field')
                 assert orm_field, "orm_field not set on %r" % field
                 setattr(django_obj, orm_field.field.attname, None)
 
