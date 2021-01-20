@@ -201,7 +201,7 @@ def check_field_access(input: BaseModel, access: Access):
     check(input, input.dict(exclude_unset=True), access)
 
 
-async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseModel, *, access: Optional[Access]) -> BaseModel:
+async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseModel, *, access: Optional[Access] = None) -> BaseModel:
     """
     Apply (partial) changes given in `input` to an orm_obj and return an instance of `model` with the full data of the orm including the updated fields.
     """
