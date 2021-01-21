@@ -1,6 +1,6 @@
 from typing import Any, Optional, List, Set, Type
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 
 class AccessScopes(set):
@@ -43,6 +43,10 @@ class AccessToken(BaseModel):
     def has_audiences(self, audiences: List[str]) -> List[str]:
         return [audience for audience in audiences if audience in self.aud]
 
+    def get_scopes(self):
+        audiences = set([AccessScope.from_str(audience) for audience in self.aud])
+        return audiences
+
 
 class AccessScope(BaseModel):
     service: str
@@ -68,3 +72,4 @@ class AccessScope(BaseModel):
 
 
 Access.update_forward_refs()
+AccessToken.update_forward_refs()

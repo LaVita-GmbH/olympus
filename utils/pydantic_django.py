@@ -13,7 +13,7 @@ from ..schemas import Access, Error, LimitOffset
 from ..exceptions import AccessError
 
 
-def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
+def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, exclude_unset: bool = False) -> None:
     """
     Transfers the field contents of pydantic_obj to django_obj.
     For this to work it is required to have orm_field set on all of the pydantic_obj's fields, which has to point to the django model attribute.
@@ -33,6 +33,8 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
         name: str = Field(orm_field=Address.name)
     ```
     """
+    pydantic_values: Optional[dict] = pydantic_obj.dict(exclude_unset=True) if exclude_unset else None
+
     def populate_none(pydantic_cls, django_obj):
         for key, field in pydantic_cls.__fields__.items():
             orm_field = field.field_info.extra.get('orm_field')
@@ -66,6 +68,9 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model) -> None:
                 transfer_to_orm(pydantic_obj=value, django_obj=django_obj)
 
         else:
+            if exclude_unset and key not in pydantic_values:
+                continue
+
             if orm_field.field.is_relation and isinstance(value, models.Model):
                 value = value.pk
 
