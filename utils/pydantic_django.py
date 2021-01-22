@@ -1,4 +1,4 @@
-from typing import List, Optional, Type
+from typing import List, Mapping, Optional, Type, Union
 import json
 from asgiref.sync import sync_to_async
 from fastapi import Query
@@ -84,7 +84,8 @@ def transfer_from_orm(
     pydantic_cls: Type[BaseModel],
     django_obj: models.Model,
     django_parent_obj: Optional[models.Model] = None,
-    pydantic_field_on_parent: Optional[ModelField] = None
+    pydantic_field_on_parent: Optional[ModelField] = None,
+    filter_submodel: Optional[Mapping[Manager, models.Q]] = None,
 ) -> BaseModel:
     """
     Transfers the field contents of django_obj to a new instance of pydantic_cls.
@@ -122,13 +123,15 @@ def transfer_from_orm(
 
             if field.shape != SHAPE_SINGLETON:
                 if field.shape == SHAPE_LIST:
+                    sub_filter = filter_submodel and filter_submodel.get(orm_field) or models.Q()
+
                     if isinstance(orm_field, ManyToManyDescriptor):
                         relatedmanager = getattr(django_obj, orm_field.field.attname)
-                        related_objs = relatedmanager.through.objects.filter(**{relatedmanager.source_field_name: relatedmanager.instance})
+                        related_objs = relatedmanager.through.objects.filter(models.Q(**{relatedmanager.source_field_name: relatedmanager.instance}) & sub_filter)
 
                     elif isinstance(orm_field, ReverseManyToOneDescriptor):
                         relatedmanager = getattr(django_obj, orm_field.rel.name)
-                        related_objs = relatedmanager.all()
+                        related_objs = relatedmanager.filter(sub_filter)
 
                     else:
                         raise NotImplementedError
@@ -251,8 +254,8 @@ def validate_object(obj: BaseModel, is_request: bool = True):
 class DjangoORMBaseModel(BaseModel):
     @classmethod
     @sync_to_async
-    def from_orm(cls, obj: models.Model):
-        return transfer_from_orm(cls, obj)
+    def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None):
+        return transfer_from_orm(cls, obj, filter_submodel=filter_submodel)
 
     class Config:
         orm_mode = True
