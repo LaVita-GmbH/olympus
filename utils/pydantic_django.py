@@ -4,11 +4,12 @@ from asgiref.sync import sync_to_async
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model
+from pydantic.error_wrappers import ErrorWrapper, ValidationError
+from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, SHAPE_SET
 from django.db import models
 from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
-from pydantic.error_wrappers import ErrorWrapper, ValidationError
-from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, SHAPE_SET
+from olympus.utils.django import AllowAsyncUnsafe
 from ..schemas import Access, Error, LimitOffset
 from ..exceptions import AccessError
 
@@ -42,7 +43,11 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, exclude_u
                 populate_none(field.type_, django_obj)
 
             else:
-                assert orm_field, "orm_field not set on %r" % field
+                if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
+                    # Do not raise error when orm_field was explicitly set to None
+                    continue
+
+                assert orm_field, "orm_field not set on %r of %r" % (field, pydantic_cls)
                 setattr(django_obj, orm_field.field.attname, None)
 
     for key, field in pydantic_obj.fields.items():
@@ -62,10 +67,13 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, exclude_u
 
         elif not orm_field and issubclass(field.type_, BaseModel):
             if value is None:
+                if exclude_unset and key not in pydantic_values:
+                    continue
+
                 populate_none(field.type_, django_obj)
 
             else:
-                transfer_to_orm(pydantic_obj=value, django_obj=django_obj)
+                transfer_to_orm(pydantic_obj=value, django_obj=django_obj, exclude_unset=exclude_unset)
 
         else:
             if exclude_unset and key not in pydantic_values:
@@ -75,7 +83,14 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, exclude_u
                 value = value.pk
 
             if isinstance(orm_field.field, models.JSONField) and value:
+                if isinstance(value, BaseModel):
                     value = value.json()
+
+                elif isinstance(value, dict):
+                    value = json.dumps(value)
+
+                else:
+                    raise NotImplementedError
 
             setattr(django_obj, orm_field.field.attname, value)
 
@@ -255,11 +270,12 @@ def orm_object_validator(model: Type[models.Model], value: Union[str, models.Q])
     if isinstance(value, str):
         value = models.Q(id=value)
 
-    try:
-        return model.objects.get(value)
+    with AllowAsyncUnsafe():
+        try:
+            return model.objects.get(value)
 
-    except model.DoesNotExist:
-        raise ValueError('reference_not_exist')
+        except model.DoesNotExist:
+            raise ValueError('reference_not_exist')
 
 
 class DjangoORMBaseModel(BaseModel):
