@@ -251,6 +251,17 @@ def validate_object(obj: BaseModel, is_request: bool = True):
         raise validation_error
 
 
+def orm_object_validator(model: Type[models.Model], value: Union[str, models.Q]):
+    if isinstance(value, str):
+        value = models.Q(id=value)
+
+    try:
+        return model.objects.get(value)
+
+    except model.DoesNotExist:
+        raise ValueError('reference_not_exist')
+
+
 class DjangoORMBaseModel(BaseModel):
     @classmethod
     @sync_to_async
