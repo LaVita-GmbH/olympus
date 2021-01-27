@@ -1,4 +1,4 @@
-from typing import List, Mapping, Optional, Type, Union
+from typing import List, Mapping, Optional, Type, TypeVar, Union
 import json
 from asgiref.sync import sync_to_async
 from fastapi import Query
@@ -269,7 +269,9 @@ def validate_object(obj: BaseModel, is_request: bool = True):
         raise validation_error
 
 
-def orm_object_validator(model: Type[models.Model], value: Union[str, models.Q]):
+TDjangoModel = TypeVar('TDjangoModel', bound=models.Model)
+
+def orm_object_validator(model: Type[TDjangoModel], value: Union[str, models.Q]) -> TDjangoModel:
     if isinstance(value, str):
         value = models.Q(id=value)
 
