@@ -21,7 +21,7 @@ class Client:
         It is possible to go as far in depth as you have to.
         """
         def __init__(self, client, path=[]):
-            self.client = client
+            self.client: Client = client
             self.path = path
             self.endpoint = "/" + "/".join([str(el) for el in self.path])
 
@@ -93,10 +93,13 @@ class Client:
                 kwargs['response'] = self.client_request._response
                 super().__init__(*args, **kwargs)
 
+            def __repr__(self):
+                return f'{self.__class__.__name__}({self.response})'
+
         _response: requests.Response = None
 
         def __init__(self, client, method, endpoint, timeout: Optional[int] = None, return_plain_response: bool = False, other_ok_states: Optional[Tuple[int]] = None, **kwargs):
-            self.client = client
+            self.client: Client = client
             self.method = method
             self.endpoint = endpoint
             self.timeout = timeout or self.client.timeout
@@ -112,10 +115,14 @@ class Client:
             return {}
 
         def _perform_request(self):
+            headers = self._get_headers()
+            if 'headers' in self.kwargs:
+                headers.update(self.kwargs.pop('headers'))
+
             return requests.request(
                 self.method.upper(),
                 self.client.url + self.endpoint,
-                headers=self._get_headers(),
+                headers=headers,
                 timeout=self.timeout,
                 **self.kwargs
             )
@@ -133,6 +140,9 @@ class Client:
         def perform(self):
             self._response = self._response_data = None
             self._response = self._perform_request()
+
+            if not self._response.ok and self._response.status_code not in self.other_ok_states:
+                raise self.APIError(self)
 
         def get_response(self):
             if not self._response:
@@ -173,5 +183,5 @@ class Client:
 
         return request.get_response()
 
-    def __getattr__(self, name):
+    def __getattr__(self, name) -> Endpoint:
         return getattr(self.endpoint, name)
