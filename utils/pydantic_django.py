@@ -181,7 +181,11 @@ def transfer_from_orm(
                     return None
 
                 if isinstance(orm_field.field, models.JSONField) and value:
-                    value = field.type_.parse_raw(value)
+                    if isinstance(value, dict):
+                        value = field.type_.parse_obj(value)
+
+                    else:
+                        value = field.type_.parse_raw(value)
 
                 values[field.name] = value
 
