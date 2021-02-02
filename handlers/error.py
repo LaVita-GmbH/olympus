@@ -1,5 +1,6 @@
 import typing
 from typing import Any
+from psycopg2.errorcodes import lookup as psycopg2_error_lookup
 from jose.exceptions import JOSEError
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
@@ -64,10 +65,13 @@ async def object_does_not_exist_handler(request: Request, exc: ObjectDoesNotExis
 
 
 async def integrity_error_handler(request: Request, exc: IntegrityError):
+    code = psycopg2_error_lookup(exc.__cause__.pgcode).lower()
+
     return await respond_details(
         request,
         schemas.Error(
             type=exc.__class__.__name__,
+            code=code,
         ),
         status_code=420,
     )
