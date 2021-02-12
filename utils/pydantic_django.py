@@ -231,6 +231,19 @@ def check_field_access(input: BaseModel, access: Access):
     check(input, input.dict(exclude_unset=True), access)
 
 
+def dict_resolve_obj_to_id(input):
+    if isinstance(input, models.Model):
+        return input.pk
+
+    if not isinstance(input, dict):
+        return input
+
+    for key, value in input.items():
+        input[key] = dict_resolve_obj_to_id(value)
+
+    return input
+
+
 async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseModel, *, access: Optional[Access] = None) -> BaseModel:
     """
     Apply (partial) changes given in `input` to an orm_obj and return an instance of `model` with the full data of the orm including the updated fields.
