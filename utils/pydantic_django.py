@@ -3,14 +3,13 @@ import json
 from asgiref.sync import sync_to_async
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, validate_model
-from pydantic.error_wrappers import ErrorWrapper, ValidationError
-from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, SHAPE_SET
+from pydantic import BaseModel, validate_model, SecretStr
+from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST
 from django.db import models
 from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from olympus.utils.django import AllowAsyncUnsafe
-from ..schemas import Access, Error, LimitOffset
+from ..schemas import Access, Error
 from ..exceptions import AccessError
 
 
@@ -54,6 +53,14 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
                 setattr(django_obj, orm_field.field.attname, None)
 
     for key, field in pydantic_obj.fields.items():
+        orm_method = field.field_info.extra.get('orm_method')
+        if orm_method:
+            value = getattr(pydantic_obj, field.name)
+            if isinstance(value, SecretStr):
+                value = value.get_secret_value()
+
+            orm_method(django_obj, value)
+            continue
 
         orm_field = field.field_info.extra.get('orm_field')
         if not orm_field:
