@@ -55,6 +55,9 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
     for key, field in pydantic_obj.fields.items():
         orm_method = field.field_info.extra.get('orm_method')
         if orm_method:
+            if exclude_unset and key not in pydantic_values:
+                continue
+
             value = getattr(pydantic_obj, field.name)
             if isinstance(value, SecretStr):
                 value = value.get_secret_value()
