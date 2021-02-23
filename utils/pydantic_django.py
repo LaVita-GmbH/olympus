@@ -191,11 +191,19 @@ def transfer_from_orm(
                     return None
 
                 if isinstance(orm_field.field, models.JSONField) and value:
-                    if isinstance(value, dict):
-                        value = field.type_.parse_obj(value)
+                    if issubclass(field.type_, BaseModel):
+                        if isinstance(value, dict):
+                            value = field.type_.parse_obj(value)
+
+                        else:
+                            value = field.type_.parse_raw(value)
+
+                    elif issubclass(field.type_, dict):
+                        if isinstance(value, str):
+                            value = json.loads(value)
 
                     else:
-                        value = field.type_.parse_raw(value)
+                        raise NotImplementedError
 
                 values[field.name] = value
 
