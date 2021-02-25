@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 from psycopg2.errorcodes import lookup as psycopg2_error_lookup
-from jose.exceptions import JOSEError
+from jose.exceptions import JOSEError, ExpiredSignatureError
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -98,7 +98,9 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 
 
 async def jose_error_handler(request: Request, exc: JOSEError):
-    capture_exception(exc)
+    if not isinstance(exc, ExpiredSignatureError):
+        capture_exception(exc)
+
     return await respond_details(
         request,
         schemas.Error(
