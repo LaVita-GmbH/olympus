@@ -1,4 +1,4 @@
-import typing
+import logging
 from typing import Any
 from psycopg2.errorcodes import lookup as psycopg2_error_lookup
 from jose.exceptions import JOSEError
@@ -11,10 +11,27 @@ from django.db.utils import IntegrityError
 
 try:
     import sentry_sdk
+    from sentry_sdk.integrations import asgi as sentry_sdk_asgi
+
 except ImportError:
     sentry_sdk = None
 
 from .. import schemas
+
+
+_logger = logging.getLogger(__name__)
+
+
+def capture_exception(exc):
+    _logger.exception(exc)
+    if not sentry_sdk:
+        return
+
+    if sentry_sdk_asgi.Hub.current:
+        sentry_sdk_asgi._capture_exception(sentry_sdk_asgi.Hub.current, exc)
+
+    else:
+        sentry_sdk.capture_exception(exc)
 
 
 async def respond_details(request: Request, content: Any, status_code: int = 500, headers: dict = None):
@@ -34,6 +51,7 @@ async def respond_details(request: Request, content: Any, status_code: int = 500
 
 
 async def http_exception_handler(request: Request, exc: HTTPException):
+    capture_exception(exc)
     content = exc.detail
 
     if isinstance(content, str):
@@ -54,6 +72,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 async def object_does_not_exist_handler(request: Request, exc: ObjectDoesNotExist):
+    capture_exception(exc)
     return await respond_details(
         request,
         schemas.Error(
@@ -65,6 +84,7 @@ async def object_does_not_exist_handler(request: Request, exc: ObjectDoesNotExis
 
 
 async def integrity_error_handler(request: Request, exc: IntegrityError):
+    capture_exception(exc)
     code = psycopg2_error_lookup(exc.__cause__.pgcode).lower()
 
     return await respond_details(
@@ -78,6 +98,7 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 
 
 async def jose_error_handler(request: Request, exc: JOSEError):
+    capture_exception(exc)
     return await respond_details(
         request,
         schemas.Error(
