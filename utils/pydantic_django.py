@@ -85,8 +85,11 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
 
                 populate_none(field.type_, django_obj)
 
-            else:
+            elif isinstance(value, BaseModel):
                 transfer_to_orm(pydantic_obj=value, django_obj=django_obj, exclude_unset=exclude_unset, access=access)
+
+            else:
+                raise NotImplementedError
 
         else:
             if exclude_unset and key not in pydantic_values:
