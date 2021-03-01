@@ -128,6 +128,9 @@ class Client:
             )
 
         def _handle_response(self):
+            if not self._response.ok and self._response.status_code not in self.other_ok_states:
+                raise self.APIError(self)
+
             return self._response_data
 
         def _get_response_data(self):
@@ -140,9 +143,6 @@ class Client:
         def perform(self):
             self._response = self._response_data = None
             self._response = self._perform_request()
-
-            if not self._response.ok and self._response.status_code not in self.other_ok_states:
-                raise self.APIError(self)
 
         def get_response(self):
             if not self._response:
