@@ -141,7 +141,11 @@ def transfer_from_orm(
     for key, field in pydantic_cls.__fields__.items():
         orm_method = field.field_info.extra.get('orm_method')
         if orm_method:
-            values[field.name] = orm_method(django_obj)
+            value = orm_method(django_obj)
+            if value is not None and issubclass(field.type_, BaseModel):
+                value = field.type_.parse_obj(value)
+
+            values[field.name] = value
 
         else:
             orm_field = field.field_info.extra.get('orm_field')
