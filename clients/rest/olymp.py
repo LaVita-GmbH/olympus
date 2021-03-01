@@ -22,7 +22,7 @@ class OlympClient(Client):
                 if not self.client._tokens.get(self.auth):
                     getattr(self.client, f'auth_{self.auth}')()
 
-                headers['Authorization'] = 'Bearer %s' % self.client._tokens[self.auth]
+                headers['Authorization'] = self.client._tokens[self.auth]
 
             return headers
 
