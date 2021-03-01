@@ -142,8 +142,18 @@ def transfer_from_orm(
         orm_method = field.field_info.extra.get('orm_method')
         if orm_method:
             value = orm_method(django_obj)
-            if value is not None and issubclass(field.type_, BaseModel):
-                value = field.type_.parse_obj(value)
+            if value is not None and issubclass(field.type_, BaseModel) and not isinstance(value, BaseModel):
+                if field.shape == SHAPE_SINGLETON:
+                    value = field.type_.parse_obj(value)
+
+                elif field.shape == SHAPE_LIST:
+                    value = [
+                        field.type_.parse_obj(item) if not isinstance(value, BaseModel) else item
+                        for item in value
+                    ]
+
+                else:
+                    raise NotImplementedError
 
             values[field.name] = value
 
