@@ -52,7 +52,7 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
                 assert orm_field, "orm_field not set on %r of %r" % (field, pydantic_cls)
                 setattr(django_obj, orm_field.field.attname, None)
 
-    for key, field in pydantic_obj.fields.items():
+    for key, field in pydantic_obj.__fields__.items():
         orm_method = field.field_info.extra.get('orm_method')
         if orm_method:
             if exclude_unset and key not in pydantic_values:
@@ -250,7 +250,7 @@ def check_field_access(input: BaseModel, access: Access):
                 check(getattr(model, key), value, access, loc=loc + [key])
 
             else:
-                scopes = model.fields[key].field_info.extra.get('scopes')
+                scopes = model.__fields__[key].field_info.extra.get('scopes')
                 if not scopes:
                     continue
 
