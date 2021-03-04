@@ -251,17 +251,25 @@ def check_field_access(input: BaseModel, access: Access):
 
             else:
                 scopes = model.__fields__[key].field_info.extra.get('scopes')
-                if not scopes:
-                    continue
+                if scopes:
+                    if not access.token.has_audience(scopes):
+                        raise AccessError(detail=Error(
+                            type='FieldAccessError',
+                            code='access_error.field',
+                            detail={
+                                'loc': loc + [key],
+                            },
+                        ))
 
-                if not access.token.has_audience(scopes):
-                    raise AccessError(detail=Error(
-                        type='FieldAccessError',
-                        code='access_error.field',
-                        detail={
-                            'loc': loc + [key],
-                        },
-                    ))
+                elif model.__fields__[key].field_info.extra.get('is_critical'):
+                    if not access.token.crt:
+                        raise AccessError(detail=Error(
+                            type='FieldAccessError',
+                            code='access_error.field_is_critical',
+                            detail={
+                                'loc': loc + [key],
+                            },
+                        ))
 
     check(input, input.dict(exclude_unset=True), access)
 

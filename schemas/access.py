@@ -32,6 +32,7 @@ class AccessToken(BaseModel):
     ten: str = Field(title='Tenant')
     aud: List[str] = Field(default=[], title='Audiences')
     jti: str = Field(title='JWT ID')
+    crt: bool = Field(False, title='Critical')
 
     def has_audience(self, audiences: List[str]) -> Optional[str]:
         for audience in audiences:
