@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
 
-class LimitOffset(BaseModel):
+class Pagination(BaseModel):
     limit: int
     offset: int
