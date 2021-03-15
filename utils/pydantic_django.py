@@ -126,8 +126,8 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
 
                 for val in value:
                     sub_obj = related_model(**{relatedmanager.field.name: django_obj})
-                    transfer_to_orm(val, sub_obj, exclude_unset=exclude_unset, access=access, created_submodels=created_submodels)
                     created_submodels.append(sub_obj)
+                    transfer_to_orm(val, sub_obj, exclude_unset=exclude_unset, access=access, created_submodels=created_submodels)
 
             else:
                 raise NotImplementedError
