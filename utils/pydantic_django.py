@@ -13,7 +13,7 @@ from ..schemas import Access, Error
 from ..exceptions import AccessError
 
 
-def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclude_unset: bool = False, access: Optional[Access] = None) -> None:
+def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclude_unset: bool = False, access: Optional[Access] = None, created_submodels: Optional[list] = None) -> None:
     """
     Transfers the field contents of pydantic_obj to django_obj.
     For this to work it is required to have orm_field set on all of the pydantic_obj's fields, which has to point to the django model attribute.
@@ -75,40 +75,65 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
                 raise AttributeError("orm_field not found on %r" % field)
 
         value = getattr(pydantic_obj, field.name)
-        if field.shape != SHAPE_SINGLETON:
-            raise NotImplementedError
+        if field.shape == SHAPE_SINGLETON:
+            if not orm_field and issubclass(field.type_, BaseModel):
+                if value is None:
+                    if exclude_unset and key not in pydantic_values:
+                        continue
 
-        elif not orm_field and issubclass(field.type_, BaseModel):
-            if value is None:
+                    populate_none(field.type_, django_obj)
+
+                elif isinstance(value, BaseModel):
+                    transfer_to_orm(pydantic_obj=value, django_obj=django_obj, exclude_unset=exclude_unset, access=access)
+
+                else:
+                    raise NotImplementedError
+
+            else:
                 if exclude_unset and key not in pydantic_values:
                     continue
 
-                populate_none(field.type_, django_obj)
+                if orm_field.field.is_relation and isinstance(value, models.Model):
+                    value = value.pk
 
-            elif isinstance(value, BaseModel):
-                transfer_to_orm(pydantic_obj=value, django_obj=django_obj, exclude_unset=exclude_unset, access=access)
+                if isinstance(orm_field.field, models.JSONField) and value:
+                    if isinstance(value, BaseModel):
+                        value = value.json()
+
+                    elif isinstance(value, dict):
+                        value = json.dumps(value)
+
+                    else:
+                        raise NotImplementedError
+
+                setattr(django_obj, orm_field.field.attname, value)
+
+        elif field.shape == SHAPE_LIST:
+            if not value:
+                continue
+
+            elif isinstance(orm_field, ManyToManyDescriptor):
+                raise NotImplementedError
+                # relatedmanager = getattr(django_obj, orm_field.field.attname)
+                # related_model = relatedmanager.through
+
+            elif isinstance(orm_field, ReverseManyToOneDescriptor):
+                relatedmanager = getattr(django_obj, orm_field.rel.name)
+                related_model = relatedmanager.field.model
+
+                if created_submodels is None:
+                    raise ValueError('must give a list in created_submodels')
+
+                for val in value:
+                    sub_obj = related_model(**{relatedmanager.field.name: django_obj})
+                    transfer_to_orm(val, sub_obj, exclude_unset=exclude_unset, access=access, created_submodels=created_submodels)
+                    created_submodels.append(sub_obj)
 
             else:
                 raise NotImplementedError
 
         else:
-            if exclude_unset and key not in pydantic_values:
-                continue
-
-            if orm_field.field.is_relation and isinstance(value, models.Model):
-                value = value.pk
-
-            if isinstance(orm_field.field, models.JSONField) and value:
-                if isinstance(value, BaseModel):
-                    value = value.json()
-
-                elif isinstance(value, dict):
-                    value = json.dumps(value)
-
-                else:
-                    raise NotImplementedError
-
-            setattr(django_obj, orm_field.field.attname, value)
+            raise NotImplementedError
 
 
 def transfer_from_orm(
