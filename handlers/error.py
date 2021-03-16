@@ -27,11 +27,7 @@ def capture_exception(exc):
     if not sentry_sdk:
         return
 
-    if sentry_sdk_asgi.Hub.current:
-        sentry_sdk_asgi._capture_exception(sentry_sdk_asgi.Hub.current, exc)
-
-    else:
-        sentry_sdk.capture_exception(exc)
+    return sentry_sdk.capture_exception(exc)
 
 
 async def respond_details(request: Request, content: Any, status_code: int = 500, headers: dict = None):
@@ -39,7 +35,7 @@ async def respond_details(request: Request, content: Any, status_code: int = 500
         'detail': jsonable_encoder(content),
     }
 
-    event_id = request.scope.get('sentry_event_id')
+    event_id = sentry_sdk.last_event_id() or request.scope.get('sentry_event_id')
     if event_id:
         response['event_id'] = event_id
 
