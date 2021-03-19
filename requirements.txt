@@ -3,3 +3,4 @@ sentry-sdk
 django
 fastapi
 pydantic>=1.8
+requests
