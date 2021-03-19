@@ -4,7 +4,7 @@ from asgiref.sync import sync_to_async
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model, SecretStr
-from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST
+from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, Undefined, UndefinedType
 from django.db import models
 from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
@@ -38,11 +38,11 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
 
     pydantic_values: Optional[dict] = pydantic_obj.dict(exclude_unset=True) if exclude_unset else None
 
-    def populate_none(pydantic_cls, django_obj):
+    def populate_default(pydantic_cls, django_obj):
         for key, field in pydantic_cls.__fields__.items():
             orm_field = field.field_info.extra.get('orm_field')
             if not orm_field and issubclass(field.type_, BaseModel):
-                populate_none(field.type_, django_obj)
+                populate_default(field.type_, django_obj)
 
             else:
                 if 'orm_field' in field.field_info.extra and field.field_info.extra['orm_field'] is None:
@@ -50,7 +50,8 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
                     continue
 
                 assert orm_field, "orm_field not set on %r of %r" % (field, pydantic_cls)
-                setattr(django_obj, orm_field.field.attname, None)
+
+                setattr(django_obj, orm_field.field.attname, field.field_info.default if field.field_info.default is not Undefined else None)
 
     for key, field in pydantic_obj.__fields__.items():
         orm_method = field.field_info.extra.get('orm_method')
@@ -81,7 +82,7 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
                     if exclude_unset and key not in pydantic_values:
                         continue
 
-                    populate_none(field.type_, django_obj)
+                    populate_default(field.type_, django_obj)
 
                 elif isinstance(value, BaseModel):
                     transfer_to_orm(pydantic_obj=value, django_obj=django_obj, exclude_unset=exclude_unset, access=access)
