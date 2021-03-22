@@ -4,3 +4,4 @@ django
 fastapi
 pydantic>=1.8
 requests
+langcodes
