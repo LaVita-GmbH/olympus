@@ -5,4 +5,5 @@ fastapi
 pydantic>=1.8
 requests
 langcodes
+celery
 celery-message-consumer
