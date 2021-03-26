@@ -51,7 +51,11 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
 
                 assert orm_field, "orm_field not set on %r of %r" % (field, pydantic_cls)
 
-                setattr(django_obj, orm_field.field.attname, field.field_info.default if field.field_info.default is not Undefined else None)
+                setattr(
+                    django_obj,
+                    orm_field.field.attname,
+                    field.field_info.default if field.field_info.default is not Undefined and field.field_info.default is not ... else None,
+                )
 
     for key, field in pydantic_obj.__fields__.items():
         orm_method = field.field_info.extra.get('orm_method')
