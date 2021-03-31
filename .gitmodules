@@ -1,0 +1,3 @@
+[submodule "clients/rest"]
+	path = clients/rest
+	url = git@git.lavita.local:web/olymp/utils/rest-client.git
