@@ -1,5 +1,6 @@
 from typing import List, Mapping, Optional, Type, TypeVar, Union
 import json
+import warnings
 from asgiref.sync import sync_to_async
 from django.db.models.query_utils import DeferredAttribute
 from fastapi import Query
@@ -9,7 +10,7 @@ from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, Undefined, 
 from django.db import models
 from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
-from olympus.utils.django import AllowAsyncUnsafe
+from .django import AllowAsyncUnsafe
 from ..schemas import Access, Error
 from ..exceptions import AccessError
 
@@ -333,6 +334,8 @@ async def update_orm(model: Type[BaseModel], orm_obj: models.Model, input: BaseM
     """
     Apply (partial) changes given in `input` to an orm_obj and return an instance of `model` with the full data of the orm including the updated fields.
     """
+    warnings.warn("Use transfer_to_orm with exclude_unset=True instead of this function", category=DeprecationWarning)
+
     if access:
         check_field_access(input, access)
 
