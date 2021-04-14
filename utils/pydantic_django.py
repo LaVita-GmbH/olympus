@@ -1,9 +1,10 @@
 from typing import List, Mapping, Optional, Type, TypeVar, Union
 import json
 from asgiref.sync import sync_to_async
+from django.db.models.query_utils import DeferredAttribute
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, validate_model, SecretStr
+from pydantic import BaseModel, validate_model, SecretStr, parse_obj_as
 from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, Undefined, UndefinedType
 from django.db import models
 from django.db.models.manager import Manager
@@ -207,6 +208,17 @@ def transfer_from_orm(
                     elif isinstance(orm_field, ReverseManyToOneDescriptor):
                         relatedmanager = getattr(django_obj, orm_field.rel.name)
                         related_objs = relatedmanager.filter(sub_filter)
+
+                    elif isinstance(orm_field, DeferredAttribute) and isinstance(orm_field.field, models.JSONField):
+                        value = None
+                        try:
+                            value = getattr(django_obj, orm_field.field.attname)
+
+                        except AttributeError:
+                            raise  # attach debugger here ;)
+
+                        values[field.name] = parse_obj_as(field.outer_type_, value or [])
+                        continue
 
                     else:
                         raise NotImplementedError
