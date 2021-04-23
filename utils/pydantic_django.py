@@ -10,6 +10,7 @@ from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, Undefined, 
 from django.db import models
 from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
+from ..security.jwt import access as access_ctx
 from .django import AllowAsyncUnsafe
 from ..schemas import Access, Error
 from ..exceptions import AccessError
@@ -379,6 +380,10 @@ TDjangoModel = TypeVar('TDjangoModel', bound=models.Model)
 def orm_object_validator(model: Type[TDjangoModel], value: Union[str, models.Q]) -> TDjangoModel:
     if isinstance(value, str):
         value = models.Q(id=value)
+
+    access = access_ctx.get()
+    if access and hasattr(model, 'tenant_id'):
+        value &= models.Q(tenant_id=access.tenant_id)
 
     with AllowAsyncUnsafe():
         try:
