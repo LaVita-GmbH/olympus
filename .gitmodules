@@ -1,3 +1,0 @@
-[submodule "clients/rest"]
-	path = clients/rest
-	url = ../rest-client.git
