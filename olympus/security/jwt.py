@@ -6,6 +6,7 @@ from fastapi.security import SecurityScopes
 from fastapi.security.api_key import APIKeyHeader
 from starlette.requests import Request
 from ..schemas import Error, Access, AccessToken, AccessScope
+from ..exceptions import AuthError
 
 
 access: ContextVar[Access] = ContextVar('access')
@@ -34,7 +35,15 @@ class JWTToken(APIKeyHeader):
         )
 
     async def __call__(self, request: Request, scopes: SecurityScopes = None) -> Optional[Access]:
-        token = await super().__call__(request)
+        try:
+            token = await super().__call__(request)
+
+        except HTTPException as error:
+            if error.status_code == 403:
+                raise AuthError from error
+
+            raise
+
         if not token:
             return
 
