@@ -1,5 +1,6 @@
 from typing import Iterable, Union, Optional, Dict
 import logging
+import json
 from functools import wraps
 from event_consumer import message_handler as base_message_handler
 from event_consumer.handlers import DEFAULT_EXCHANGE
@@ -13,7 +14,19 @@ _logger = logging.getLogger(__name__)
 def transaction_captured_function(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        transaction = start_transaction(op='message_handler', name=f'{func.__module__}.{func.__name__}')
+        trace_id = None
+
+        try:
+            trace_id = json.loads(args[0]).get('metadata', {}).get('flow_id')
+
+        except (IndexError, json.JSONDecodeError):
+            pass
+
+        transaction = start_transaction(
+            op='message_handler',
+            name=f'{func.__module__}.{func.__name__}',
+            trace_id=trace_id,
+        )
         with transaction:
             result = func(*args, **kwargs)
 
