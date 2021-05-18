@@ -12,7 +12,7 @@ from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from ..security.jwt import access as access_ctx
 from .django import AllowAsyncUnsafe
-from ..schemas import Access, Error
+from ..schemas import Access, Error, AccessScope
 from ..exceptions import AccessError
 
 
@@ -265,6 +265,26 @@ def transfer_from_orm(
 
                     else:
                         raise NotImplementedError
+
+                scopes = [AccessScope.from_str(audience) for audience in field.field_info.extra.get('scopes', [])]
+                if scopes:
+                    read_scopes = [str(scope) for scope in scopes if scope.action == 'read']
+                    access = access_ctx.get()
+                    if read_scopes:
+                        if not access.token.has_audience(read_scopes):
+                            value = None
+
+                        else:
+                            if hasattr(django_obj, 'check_access'):
+                                for scope in scopes:
+                                    if scope.action != 'read':
+                                        continue
+
+                                    try:
+                                        django_obj.check_access(access, selector=scope.selector)
+
+                                    except AccessError:
+                                        value = None
 
                 values[field.name] = value
 
