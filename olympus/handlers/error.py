@@ -83,7 +83,11 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     capture_exception(exc)
     code = psycopg2_error_lookup(exc.__cause__.pgcode).lower()
     try:
-        code += ":" + exc.__cause__.diag.constraint_name
+        if exc.__cause__.diag.constraint_name:
+            code += ":" + exc.__cause__.diag.constraint_name
+
+        elif exc.__cause__.diag.column_name:
+            code += ":" + exc.__cause__.diag.column_name
 
     except AttributeError:
         pass
