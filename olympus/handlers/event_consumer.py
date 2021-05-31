@@ -14,12 +14,23 @@ _logger = logging.getLogger(__name__)
 def transaction_captured_function(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        trace_id = None
+        trace_id = data = None
 
         try:
-            trace_id = json.loads(args[0]).get('metadata', {}).get('flow_id')
+            if isinstance(args[0], (str, bytes)):
+                try:
+                    data = json.loads(args[0])
 
-        except (IndexError, json.JSONDecodeError):
+                except json.JSONDecodeError:
+                    pass
+
+            elif isinstance(args[0], dict):
+                data = args[0]
+
+            if data:
+                trace_id = data.get('metadata', {}).get('flow_id')
+
+        except IndexError:
             pass
 
         transaction = start_transaction(
