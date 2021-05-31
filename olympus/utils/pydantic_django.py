@@ -268,23 +268,29 @@ def transfer_from_orm(
 
                 scopes = [AccessScope.from_str(audience) for audience in field.field_info.extra.get('scopes', [])]
                 if scopes:
-                    read_scopes = [str(scope) for scope in scopes if scope.action == 'read']
-                    access = access_ctx.get()
-                    if read_scopes:
-                        if not access.token.has_audience(read_scopes):
-                            value = None
+                    try:
+                        access = access_ctx.get()
 
-                        else:
-                            if hasattr(django_obj, 'check_access'):
-                                for scope in scopes:
-                                    if scope.action != 'read':
-                                        continue
+                    except LookupError:
+                        pass
 
-                                    try:
-                                        django_obj.check_access(access, selector=scope.selector)
+                    else:
+                        read_scopes = [str(scope) for scope in scopes if scope.action == 'read']
+                        if read_scopes:
+                            if not access.token.has_audience(read_scopes):
+                                value = None
 
-                                    except AccessError:
-                                        value = None
+                            else:
+                                if hasattr(django_obj, 'check_access'):
+                                    for scope in scopes:
+                                        if scope.action != 'read':
+                                            continue
+
+                                        try:
+                                            django_obj.check_access(access, selector=scope.selector)
+
+                                        except AccessError:
+                                            value = None
 
                 values[field.name] = value
 
