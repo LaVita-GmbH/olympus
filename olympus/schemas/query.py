@@ -1,6 +1,7 @@
 from typing import List, Union
 from pydantic import BaseModel
-from django.db import models
+from django.db.models import Q, QuerySet
+from django.db.models.manager import BaseManager
 
 
 class Pagination(BaseModel):
@@ -8,7 +9,7 @@ class Pagination(BaseModel):
     offset: int
     order_by: List[str]
 
-    def query(self, objects: Union[models.BaseManager, models.QuerySet], q_filters: models.Q) -> models.QuerySet:
+    def query(self, objects: Union[BaseManager, QuerySet], q_filters: Q) -> QuerySet:
         """
         Filter a given model's BaseManager or pre-filtered Queryset with the given q_filters and apply order_by and offset/limit from the pagination.
         """
