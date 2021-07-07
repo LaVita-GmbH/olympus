@@ -65,7 +65,7 @@ class EventSubscription:
 
     def __init__(self, body):
         self.body = body
-        self.event = DataChangeEvent.parse_raw(self.body)
+        self.event = DataChangeEvent.parse_raw(self.body) if isinstance(self.body, (bytes, str)) else DataChangeEvent.parse_obj(self.body)
 
     def process(self):
         if self.event.data_op == DataChangeEvent.DataOperation.DELETE:
