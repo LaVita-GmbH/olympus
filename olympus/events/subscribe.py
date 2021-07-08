@@ -77,7 +77,8 @@ class EventSubscription:
     @property
     def orm_obj(self) -> TDjangoModel:
         if not self.__orm_obj:
-            query = models.Q(id=json.loads(self.body).get('id'))
+            data = json.loads(self.body) if isinstance(self.body, (bytes, str)) else self.body
+            query = models.Q(id=data.get('id'))
             if self.is_tenant_bound:
                 query &= models.Q(tenant_id=self.event.tenant_id)
 
