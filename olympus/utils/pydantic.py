@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional, Type
+from typing import Callable, Dict, ForwardRef, Optional, Type
 from pydantic import BaseModel, create_model, Field
 from pydantic.fields import ModelField
 
@@ -58,6 +58,9 @@ class Reference(BaseModel):
 def include_reference(reference_key: str = '$rel', reference_params_key: str = '$rel_params'):
     def wrapped(cls: Type[BaseModel]):
         def model_with_rel(c, __module__: str):
+            if isinstance(c, ForwardRef):
+                return c
+
             if issubclass(c, BaseModel):
                 field: ModelField
                 fields = {}
