@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Type
+from typing import Callable, Dict, Optional, Type
 from pydantic import BaseModel, create_model, Field
 from pydantic.fields import ModelField
 
@@ -33,21 +33,29 @@ def to_optional(id_key: str = 'id'):
 
 
 class Reference(BaseModel):
-    def __init_subclass__(cls, rel: Optional[str] = None, **kwargs) -> None:
+    def __init_subclass__(cls, rel: Optional[str] = None, rel_params: Optional[Callable] = None, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
         cls._rel = rel
+        cls._rel_params = rel_params
         c = cls
         while cls._rel is None:
             if issubclass(c.__base__, Reference):
                 c = c.__base__
+                if not c:
+                    raise AssertionError("Cannot find parent Reference with `rel` set")
+
                 try:
                     cls._rel = c._rel
+                    cls._rel_params = c._rel_params
 
                 except AttributeError:
                     pass
 
+            else:
+                raise AssertionError
 
-def include_reference(reference_key: str = '$rel'):
+
+def include_reference(reference_key: str = '$rel', reference_params_key: str = '$rel_params'):
     def wrapped(cls: Type[BaseModel]):
         def model_with_rel(c, __module__: str):
             if issubclass(c, BaseModel):
@@ -59,6 +67,8 @@ def include_reference(reference_key: str = '$rel'):
 
                 if issubclass(c, Reference):
                     fields[reference_key] = (str, Field(c._rel, example=c._rel, orm_field=None, alias=reference_key, const=True))
+                    if c._rel_params:
+                        fields[reference_params_key] = (dict, Field(alias=reference_params_key, orm_method=c._rel_params))
 
                 return create_model(c.__name__, __base__=c, __module__=__module__, **fields)
 
