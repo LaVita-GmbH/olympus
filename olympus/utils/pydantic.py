@@ -64,15 +64,18 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
     def wrapped(cls: Type[BaseModel]):
         def model_with_rel(c, __module__: str, __parent__module__: str):
             if isinstance(c, ForwardRef):
-                return c
+                return c, False
 
             if issubclass(c, BaseModel):
                 field: ModelField
                 fields = {}
                 recreate_model = False
                 for key, field in c.__fields__.items():
-                    field_type = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
+                    field_type, recreated_model = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
                     fields[key] = (field_type, Field(field.default, **field.field_info.extra))
+                    if recreated_model:
+                        recreate_model = True
+
                     try:
                         if issubclass(field_type, Reference):
                             recreate_model = True
@@ -82,9 +85,9 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
 
                 if issubclass(c, Reference):
                     recreate_model = True
-                    fields[reference_key] = (str, Field(c._rel, example=c._rel, orm_field=None, alias=reference_key, const=True))
+                    fields['x_reference_key'] = (str, Field(c._rel, example=c._rel, orm_field=None, alias=reference_key))
                     if c._rel_params:
-                        fields[reference_params_key] = (dict, Field(alias=reference_params_key, orm_method=c._rel_params))
+                        fields['x_reference_params_key'] = (dict, Field(alias=reference_params_key, orm_method=c._rel_params))
 
                 if recreate_model:
                     return create_model(
@@ -92,10 +95,10 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                         __base__=c,
                         __module__=c.__module__ if c.__module__ != __parent__module__ else __module__,
                         **fields,
-                    )
+                    ), True
 
-            return c
+            return c, False
 
-        return model_with_rel(cls, __module__=cls.__module__, __parent__module__=cls.__base__.__module__)
+        return model_with_rel(cls, __module__=cls.__module__, __parent__module__=cls.__base__.__module__)[0]
 
     return wrapped
