@@ -1,34 +1,41 @@
-from typing import Callable, Dict, ForwardRef, Optional, Type
+from typing import Callable, Dict, ForwardRef, Optional, Type, Any
 from pydantic import BaseModel, create_model, Field
-from pydantic.fields import ModelField
+from pydantic.fields import ModelField, SHAPE_SINGLETON
+
+
+TypingGenericAlias = type(Any)
 
 
 def to_optional(id_key: str = 'id'):
     def wrapped(cls: Type[BaseModel]):
         def optional_model(c, __module__: str, __parent__module__: str):
-            if issubclass(c, BaseModel):
-                field: ModelField
-                fields = {}
-                for key, field in c.__fields__.items():
-                    field_type = optional_model(field.type_, __module__=__module__, __parent__module__=__parent__module__)
-                    default = field.default
-                    if key == id_key and not field.allow_none:
-                        default = default or ...
+            try:
+                if issubclass(c, BaseModel):
+                    field: ModelField
+                    fields = {}
+                    for key, field in c.__fields__.items():
+                        field_type = optional_model(field.outer_type_, __module__=__module__, __parent__module__=__parent__module__)
+                        default = field.default
+                        if key == id_key and not field.allow_none:
+                            default = default or ...
 
-                    elif not field.allow_none:
-                        field_type = Optional[field_type]
+                        elif not field.allow_none:
+                            field_type = Optional[field_type]
 
-                    elif field.required:
-                        default = default or ...
+                        elif field.required:
+                            default = default or ...
 
-                    fields[key] = (field_type, Field(default, **field.field_info.extra))
+                        fields[key] = (field_type, Field(default, **field.field_info.extra))
 
-                return create_model(
-                    c.__qualname__,
-                    __base__=c,
-                    __module__=c.__module__ if c.__module__ != __parent__module__ else __module__,
-                    **fields,
-                )
+                    return create_model(
+                        c.__qualname__,
+                        __base__=c,
+                        __module__=c.__module__ if c.__module__ != __parent__module__ else __module__,
+                        **fields,
+                    )
+
+            except TypeError:
+                pass
 
             return c
 
@@ -71,6 +78,10 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                 fields = {}
                 recreate_model = False
                 for key, field in c.__fields__.items():
+                    if field.shape != SHAPE_SINGLETON:
+                        fields[key] = (field.outer_type_, Field(field.default, **field.field_info.extra))
+                        continue
+
                     field_type, recreated_model = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
                     fields[key] = (field_type, Field(field.default, **field.field_info.extra))
                     if recreated_model:
