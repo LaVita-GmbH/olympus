@@ -69,23 +69,24 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
             if issubclass(c, BaseModel):
                 field: ModelField
                 fields = {}
-                has_reference = False
+                recreate_model = False
                 for key, field in c.__fields__.items():
                     field_type = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
                     fields[key] = (field_type, Field(field.default, **field.field_info.extra))
                     try:
                         if issubclass(field_type, Reference):
-                            has_reference = True
+                            recreate_model = True
 
                     except TypeError:
                         pass
 
                 if issubclass(c, Reference):
+                    recreate_model = True
                     fields[reference_key] = (str, Field(c._rel, example=c._rel, orm_field=None, alias=reference_key, const=True))
                     if c._rel_params:
                         fields[reference_params_key] = (dict, Field(alias=reference_params_key, orm_method=c._rel_params))
 
-                if has_reference:
+                if recreate_model:
                     return create_model(
                         c.__qualname__,
                         __base__=c,
