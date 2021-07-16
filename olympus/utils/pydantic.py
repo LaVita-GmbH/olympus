@@ -1,9 +1,21 @@
 from typing import Callable, Dict, ForwardRef, Optional, Type, Any
 from pydantic import BaseModel, create_model, Field
-from pydantic.fields import ModelField, SHAPE_SINGLETON
+from pydantic.fields import ModelField, FieldInfo, SHAPE_SINGLETON, Undefined
 
 
 TypingGenericAlias = type(Any)
+
+
+def _new_field_from_model_field(
+    field: ModelField,
+    default: Any = Undefined,
+):
+    return Field(
+        default if default is not Undefined else field.default,
+        default_factory=field.default_factory,
+        alias=field.alias,
+        **field.field_info.extra,
+    )
 
 
 def to_optional(id_key: str = 'id'):
@@ -25,7 +37,7 @@ def to_optional(id_key: str = 'id'):
                         elif field.required:
                             default = default or ...
 
-                        fields[key] = (field_type, Field(default, **field.field_info.extra))
+                        fields[key] = (field_type, _new_field_from_model_field(field, default))
 
                     return create_model(
                         c.__qualname__,
@@ -79,11 +91,11 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                 recreate_model = False
                 for key, field in c.__fields__.items():
                     if field.shape != SHAPE_SINGLETON:
-                        fields[key] = (field.outer_type_, Field(field.default, **field.field_info.extra))
+                        fields[key] = (field.outer_type_, _new_field_from_model_field(field))
                         continue
 
                     field_type, recreated_model = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
-                    fields[key] = (field_type, Field(field.default, **field.field_info.extra))
+                    fields[key] = (field_type, _new_field_from_model_field(field))
                     if recreated_model:
                         recreate_model = True
 
