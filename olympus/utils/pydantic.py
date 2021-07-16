@@ -10,8 +10,14 @@ def _new_field_from_model_field(
     field: ModelField,
     default: Any = Undefined,
 ):
+    if default is not Undefined:
+        default = field.default
+
+    if field.required and (default is Undefined or field.default is None):
+        default = ...
+
     return Field(
-        default if default is not Undefined else field.default,
+        default,
         default_factory=field.default_factory,
         alias=field.alias,
         **field.field_info.extra,
@@ -95,6 +101,9 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                         continue
 
                     field_type, recreated_model = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
+                    if field.allow_none:
+                        field_type = Optional[field_type]
+
                     fields[key] = (field_type, _new_field_from_model_field(field))
                     if recreated_model:
                         recreate_model = True
