@@ -72,10 +72,13 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                 has_reference = False
                 for key, field in c.__fields__.items():
                     field_type = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
-                    if not isinstance(c, ForwardRef) and issubclass(field_type, Reference):
-                        has_reference = True
-
                     fields[key] = (field_type, Field(field.default, **field.field_info.extra))
+                    try:
+                        if issubclass(field_type, Reference):
+                            has_reference = True
+
+                    except TypeError:
+                        pass
 
                 if issubclass(c, Reference):
                     fields[reference_key] = (str, Field(c._rel, example=c._rel, orm_field=None, alias=reference_key, const=True))
