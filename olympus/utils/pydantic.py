@@ -9,11 +9,12 @@ TypingGenericAlias = type(Any)
 def _new_field_from_model_field(
     field: ModelField,
     default: Any = Undefined,
+    required: Optional[bool] = None
 ):
     if default is not Undefined:
         default = field.default
 
-    if field.required and (default is Undefined or field.default is None):
+    if required is None and field.required and (default is Undefined or field.default is None):
         default = ...
 
     return Field(
@@ -43,7 +44,7 @@ def to_optional(id_key: str = 'id'):
                         elif field.required:
                             default = default or ...
 
-                        fields[key] = (field_type, _new_field_from_model_field(field, default))
+                        fields[key] = (field_type, _new_field_from_model_field(field, default, required=False))
 
                     return create_model(
                         c.__qualname__,
