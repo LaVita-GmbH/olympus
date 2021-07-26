@@ -1,7 +1,7 @@
 from typing import List, Mapping, Optional, Type, TypeVar, Union
 import json
 import warnings
-from asgiref.sync import sync_to_async
+from asgiref.sync import sync_to_async, async_to_sync
 from django.db.models.query_utils import DeferredAttribute
 from fastapi import Query
 from fastapi.exceptions import RequestValidationError
@@ -180,9 +180,18 @@ def transfer_from_orm(
                     value = field.type_.parse_obj(value)
 
                 elif field.shape == SHAPE_LIST:
+                    def _to_pydantic(obj):
+                        if isinstance(obj, BaseModel):
+                            return obj
+
+                        if isinstance(obj, models.Model):
+                            return async_to_sync(field.type_.from_orm)(obj)
+
+                        return field.type_.parse_obj(obj)
+
                     value = [
-                        field.type_.parse_obj(item) if not isinstance(value, BaseModel) else item
-                        for item in value
+                        _to_pydantic(obj)
+                        for obj in value
                     ]
 
                 else:
