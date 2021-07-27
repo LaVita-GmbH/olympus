@@ -1,18 +1,21 @@
 import warnings
 import logging
 import json
-from typing import Type, TypeVar, Union, Iterable, Optional, Dict
+from typing import Any, Type, TypeVar, Union, Iterable, Optional, Dict
 from event_consumer.handlers import DEFAULT_EXCHANGE
-from event_consumer.conf import settings
 from pydantic import BaseModel
 from django.db import models
 from ..handlers.event_consumer import message_handler
-from ..utils import transfer_to_orm
+from ..utils.pydantic_django import transfer_to_orm, TransferAction
 from ..schemas import DataChangeEvent
 
 
 TBaseModel = TypeVar('TBaseModel', bound=BaseModel)
 TDjangoModel = TypeVar('TDjangoModel', bound=models.Model)
+
+
+class Break(Exception):
+    pass
 
 
 class EventSubscription:
@@ -26,6 +29,7 @@ class EventSubscription:
         queue: Optional[str] = None,
         exchange: str = DEFAULT_EXCHANGE,
         queue_arguments: Optional[Dict[str, object]] = None,
+        delete_on_status: Optional[Any] = None,
         **kwargs,
     ):
         super().__init_subclass__(**kwargs)
@@ -35,6 +39,7 @@ class EventSubscription:
         cls.queue = queue
         cls.exchange = exchange
         cls.queue_arguments = queue_arguments
+        cls.delete_on_status = delete_on_status
         cls.logger = logging.getLogger(f'{cls.__module__}.{cls.__name__}')
 
         message_handler(
@@ -66,6 +71,7 @@ class EventSubscription:
     def __init__(self, body):
         self.body = body
         self.event = DataChangeEvent.parse_raw(self.body) if isinstance(self.body, (bytes, str)) else DataChangeEvent.parse_obj(self.body)
+        self.is_new_orm_obj = False
 
     def process(self):
         if self.event.data_op == DataChangeEvent.DataOperation.DELETE:
@@ -91,21 +97,33 @@ class EventSubscription:
         self.__orm_obj = value
 
     def create_orm_obj(self, data: TBaseModel):
-        fields = {'id': models.Q(id=data.id)}
+        fields = {'id': data.id}
         if self.is_tenant_bound:
             fields['tenant_id'] = self.event.tenant_id
 
         self.orm_obj = self.orm_model(**fields)
+        self.is_new_orm_obj = True
 
     def op_delete(self):
+        if self.is_new_orm_obj:
+            return
+
         try:
             self.orm_obj.delete()
 
         except self.orm_model.DoesNotExist:
             pass
 
+    def before_transfer(self):
+        if self.delete_on_status and self.data.status == self.delete_on_status:
+            self.op_delete()
+            raise Break
+
+    def after_transfer(self):
+        pass
+
     def op_create_or_update(self):
-        data: TBaseModel = self.event_schema.parse_obj(self.event.data)
+        self.data: TBaseModel = self.event_schema.parse_obj(self.event.data)
         try:
             try:
                 if self.orm_obj.updated_at > self.event.metadata.occurred_at:
@@ -116,7 +134,14 @@ class EventSubscription:
                 pass
 
         except self.orm_model.DoesNotExist:
-            self.create_orm_obj(data)
+            self.create_orm_obj(self.data)
 
-        transfer_to_orm(data, self.orm_obj)
-        self.orm_obj.save()
+        try:
+            self.before_transfer()
+
+        except Break:
+            return
+
+        transfer_to_orm(self.data, self.orm_obj, action=TransferAction.SYNC)
+
+        self.after_transfer()

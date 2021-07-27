@@ -1,22 +1,39 @@
-from typing import List, Mapping, Optional, Type, TypeVar, Union
 import json
 import warnings
+from typing import List, Mapping, Optional, Tuple, Type, TypeVar, Union
+from enum import Enum
 from asgiref.sync import sync_to_async, async_to_sync
 from django.db.models.query_utils import DeferredAttribute
-from fastapi import Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model, SecretStr, parse_obj_as
-from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, Undefined, UndefinedType
+from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, Undefined
 from django.db import models
 from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
+from django.db.transaction import atomic
 from ..security.jwt import access as access_ctx
 from .django import AllowAsyncUnsafe
+from .asyncio import is_async
 from ..schemas import Access, Error, AccessScope
 from ..exceptions import AccessError
 
 
-def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclude_unset: bool = False, access: Optional[Access] = None, created_submodels: Optional[list] = None) -> None:
+class TransferAction(Enum):
+    CREATE = 'CREATE'
+    SYNC = 'SYNC'
+    NO_SUBOBJECTS = 'NO_SUBOBJECTS'
+
+
+def transfer_to_orm(
+    pydantic_obj: BaseModel,
+    django_obj: models.Model,
+    *,
+    action: Optional[TransferAction] = None,
+    exclude_unset: bool = False,
+    access: Optional[Access] = None,
+    created_submodels: Optional[list] = None,
+    _just_return_objs: bool = False,
+) -> Optional[Tuple[List[models.Model], List[models.Model]]]:
     """
     Transfers the field contents of pydantic_obj to django_obj.
     For this to work it is required to have orm_field set on all of the pydantic_obj's fields, which has to point to the django model attribute.
@@ -36,6 +53,26 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
         name: str = Field(orm_field=Address.name)
     ```
     """
+    if is_async():
+        return sync_to_async(transfer_to_orm)(
+            pydantic_obj=pydantic_obj,
+            django_obj=django_obj,
+            action=action,
+            exclude_unset=exclude_unset,
+            access=access,
+            created_submodels=created_submodels,
+        )
+
+    if created_submodels:
+        warnings.warn("Use transfer_to_orm with kwarg action instead of created_submodels", category=DeprecationWarning)
+        action = TransferAction.CREATE
+
+    if not action:
+        warnings.warn("Use transfer_to_orm with kwarg action", category=DeprecationWarning)
+
+    subobjects = created_submodels or []
+    existing_objects = []
+
     if access:
         check_field_access(pydantic_obj, access)
 
@@ -92,7 +129,9 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
                     populate_default(field.type_, django_obj)
 
                 elif isinstance(value, BaseModel):
-                    transfer_to_orm(pydantic_obj=value, django_obj=django_obj, exclude_unset=exclude_unset, access=access)
+                    sub_transfer = transfer_to_orm(pydantic_obj=value, django_obj=django_obj, exclude_unset=exclude_unset, access=access, action=action, _just_return_objs=True)
+                    subobjects += sub_transfer[0]
+                    existing_objects += sub_transfer[1]
 
                 else:
                     raise NotImplementedError
@@ -121,27 +160,101 @@ def transfer_to_orm(pydantic_obj: BaseModel, django_obj: models.Model, *, exclud
                 continue
 
             elif isinstance(orm_field, ManyToManyDescriptor):
-                raise NotImplementedError
-                # relatedmanager = getattr(django_obj, orm_field.field.attname)
-                # related_model = relatedmanager.through
+                relatedmanager = getattr(django_obj, orm_field.field.attname)
+                related_model = relatedmanager.through
+                obj_fields = {relatedmanager.source_field_name: django_obj}
+                existing_object_ids = set()
+                if action == TransferAction.SYNC:
+                    existing_object_ids = set(related_model.objects.filter(**obj_fields).values_list('id', flat=True))
+
+                for val in value:
+                    def get_subobj(force_create: bool = False):
+                        obj_manytomany_fields = {**obj_fields, **{relatedmanager.target_field.attname: val.id}}
+                        if force_create or action == TransferAction.CREATE:
+                            return related_model(**obj_manytomany_fields)
+
+                        elif action == TransferAction.SYNC:
+                            try:
+                                return related_model.objects.get(**obj_manytomany_fields)
+
+                            except related_model.DoesNotExist:
+                                return get_subobj(force_create=True)
+
+                        else:
+                            raise NotImplementedError
+
+                    sub_obj = get_subobj()
+                    existing_object_ids.discard(sub_obj.id)
+                    subobjects.append(sub_obj)
+                    sub_transfer = transfer_to_orm(val, sub_obj, exclude_unset=exclude_unset, access=access, action=action, _just_return_objs=True)
+                    subobjects += sub_transfer[0]
+                    existing_objects += sub_transfer[1]
+
+                existing_objects += related_model.objects.filter(id__in=list(existing_object_ids))
 
             elif isinstance(orm_field, ReverseManyToOneDescriptor):
                 relatedmanager = getattr(django_obj, orm_field.rel.name)
-                related_model = relatedmanager.field.model
+                related_model: Type[models.Model] = relatedmanager.field.model
+                obj_fields = {relatedmanager.field.name: django_obj}
 
-                if created_submodels is None:
-                    raise ValueError('must give a list in created_submodels')
+                existing_object_ids = set()
+                if action == TransferAction.SYNC:
+                    existing_object_ids = set(related_model.objects.filter(**obj_fields).values_list('id', flat=True))
 
                 for val in value:
-                    sub_obj = related_model(**{relatedmanager.field.name: django_obj})
-                    created_submodels.append(sub_obj)
-                    transfer_to_orm(val, sub_obj, exclude_unset=exclude_unset, access=access, created_submodels=created_submodels)
+                    def get_subobj(force_create: bool = False):
+                        if force_create or action == TransferAction.CREATE or (action == TransferAction.SYNC and not getattr(val, 'id', None)):
+                            create_fields = {}
+                            if getattr(val, 'id', None):
+                                create_fields['id'] = getattr(val, 'id', None)
+
+                            return related_model(**obj_fields, **create_fields)
+
+                        elif action == TransferAction.SYNC:
+                            try:
+                                return related_model.objects.get(id=val.id, **obj_fields)
+
+                            except related_model.DoesNotExist:
+                                return get_subobj(force_create=True)
+
+                        else:
+                            raise NotImplementedError
+
+                    sub_obj = get_subobj()
+                    existing_object_ids.discard(sub_obj.id)
+                    subobjects.append(sub_obj)
+                    sub_transfer = transfer_to_orm(val, sub_obj, exclude_unset=exclude_unset, access=access, action=action, _just_return_objs=True)
+                    subobjects += sub_transfer[0]
+                    existing_objects += sub_transfer[1]
+
+                existing_objects += related_model.objects.filter(id__in=list(existing_object_ids))
 
             else:
                 raise NotImplementedError
 
         else:
             raise NotImplementedError
+
+    if subobjects and not action:
+        raise AssertionError('action is not defined but subobjects exist')
+
+    if _just_return_objs:
+        return subobjects, existing_objects
+
+    if action in (TransferAction.CREATE, TransferAction.SYNC, TransferAction.NO_SUBOBJECTS) and created_submodels is None:
+        with atomic():
+            django_obj.save()
+
+            if action != TransferAction.NO_SUBOBJECTS:
+                for obj in subobjects:
+                    obj.save()
+
+                if action == TransferAction.SYNC:
+                    for obj in existing_objects:
+                        obj.delete()
+
+
+transfer_to_orm_async = sync_to_async(transfer_to_orm)
 
 
 def transfer_from_orm(
