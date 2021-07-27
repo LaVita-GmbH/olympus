@@ -49,7 +49,7 @@ class EventSubscription:
 
         cls.is_tenant_bound = hasattr(cls.orm_model, 'tenant_id')
 
-        cls.logger.debug(
+        cls.logger.info(
             "Registered EventSubscription %r with event_schema %r and orm_model %r with queue '%s' on exchange '%s'",
             cls,
             cls.event_schema,
