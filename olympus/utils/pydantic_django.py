@@ -212,7 +212,7 @@ def transfer_to_orm(
 
                         elif action == TransferAction.SYNC:
                             try:
-                                return related_model.objects.get(id=val.id, **obj_fields)
+                                return related_model.objects.get(id=val.id)
 
                             except related_model.DoesNotExist:
                                 return get_subobj(force_create=True)
