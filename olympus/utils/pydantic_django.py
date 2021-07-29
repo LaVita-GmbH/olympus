@@ -11,6 +11,7 @@ from django.db import models
 from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from django.db.transaction import atomic
+from django.utils.functional import cached_property
 from ..security.jwt import access as access_ctx
 from .django import AllowAsyncUnsafe
 from .asyncio import is_async
@@ -364,8 +365,25 @@ def transfer_from_orm(
 
             else:
                 value = None
+                is_property = isinstance(orm_field, (property, cached_property))
+                is_django_field = not is_property
+
                 try:
-                    value = getattr(django_obj, orm_field.field.attname)
+                    if is_property:
+                        if isinstance(orm_field, property):
+                            value = orm_field.fget(django_obj)
+
+                        elif isinstance(orm_field, cached_property):
+                            value = orm_field.__get__(django_obj)
+
+                        else:
+                            raise NotImplementedError
+
+                        if isinstance(value, models.Model):
+                            value = value.pk
+
+                    else:
+                        value = getattr(django_obj, orm_field.field.attname)
 
                 except AttributeError:
                     raise  # attach debugger here ;)
@@ -373,7 +391,7 @@ def transfer_from_orm(
                 if field.required and pydantic_field_on_parent and pydantic_field_on_parent.allow_none and value is None:
                     return None
 
-                if isinstance(orm_field.field, models.JSONField) and value:
+                if is_django_field and value and isinstance(orm_field.field, models.JSONField):
                     if issubclass(field.type_, BaseModel):
                         if isinstance(value, dict):
                             value = field.type_.parse_obj(value)
