@@ -37,7 +37,7 @@ def _get_uid() -> Optional[str]:
 
 def _get_scopes() -> list:
     try:
-        return list(access_ctx.get().token.get_scopes())
+        return access_ctx.get().token.aud
 
     except LookupError:
         return []
