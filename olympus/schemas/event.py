@@ -42,15 +42,26 @@ def _get_scopes() -> list:
     except LookupError:
         return []
 
+def _get_roles() -> list:
+    try:
+        return access_ctx.get().token.rls
+
+    except LookupError:
+        return []
+
 
 class EventMetadata(BaseModel):
+    class User(BaseModel):
+        uid: Optional[str] = Field(default_factory=_get_uid)
+        scopes: List[str] = Field(default_factory=_get_scopes)
+        roles: List[str] = Field(default_factory=_get_roles)
+
     eid: str = Field(min_length=64, max_length=64, default_factory=default_eid)
     event_type: Optional[str]
     occurred_at: datetime = Field(default_factory=timezone.now)
     # received_at
     # version
-    uid: Optional[str] = Field(default_factory=_get_uid)
-    scopes: List[str] = Field(default_factory=_get_scopes)
+    user: Optional[User] = Field(default_factory=User)
     parent_eids: List[str] = Field([])
     flow_id: Optional[str] = Field(default_factory=_get_flow_id)
 

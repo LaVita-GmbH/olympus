@@ -31,6 +31,7 @@ class AccessToken(BaseModel):
     sub: str = Field(title='Subject (User)')
     ten: str = Field(title='Tenant')
     aud: List[str] = Field(default=[], title='Audiences')
+    rls: List[str] = Field(default=[], title='Roles')
     jti: str = Field(title='JWT ID')
     crt: bool = Field(False, title='Critical')
 
