@@ -1,16 +1,14 @@
-import warnings
 import logging
-import json
-from typing import Any, Tuple, Type, TypeVar, Union, Iterable, Optional, Dict
+from typing import Tuple, Type, TypeVar, Union, TYPE_CHECKING
 from functools import partial
 from kombu import Exchange, Connection
+from pydantic import BaseModel
 from django.dispatch import receiver, Signal
 from django.db.models.signals import post_save, post_delete
-
-from pydantic import BaseModel
 from django.db import models
 from ..utils.pydantic_django import transfer_from_orm
 from ..schemas import DataChangeEvent, EventMetadata
+from ..utils.typing import with_typehint
 
 
 TBaseModel = TypeVar('TBaseModel', bound=BaseModel)
@@ -57,9 +55,13 @@ class EventPublisher:
         cls.type = type
         cls.is_changed_included = is_changed_included
         cls.is_tenant_bound = hasattr(cls.orm_model, 'tenant_id')
+        cls.logger = logging.getLogger(f'{cls.__module__}.{cls.__name__}')
 
-        receiver(post_save, sender=cls.orm_model)(partial(cls.handle, signal=post_save))
-        receiver(post_delete, sender=cls.orm_model)(partial(cls.handle, signal=post_delete))
+        cls.register()
+
+    @classmethod
+    def register(cls):
+        raise NotImplementedError
 
     @classmethod
     def handle(cls, sender, instance: TDjangoModel, signal: Signal, **kwargs):
@@ -122,6 +124,7 @@ class EventPublisher:
         }
 
     def process(self):
+        self.logger.debug("Publish DataChangeEvent for %s with schema %s on %r", self.orm_model, self.event_schema, self.exchange)
         self.producer.publish(
             retry=True,
             retry_policy=self.get_retry_policy(),
@@ -131,5 +134,9 @@ class EventPublisher:
         )
 
 
-class DataChangePublisher:
-    pass
+class DataChangePublisher(with_typehint(EventPublisher)):
+    @classmethod
+    def register(cls):
+        receiver(post_save, sender=cls.orm_model)(partial(cls.handle, signal=post_save))
+        receiver(post_delete, sender=cls.orm_model)(partial(cls.handle, signal=post_delete))
+        cls.logger.debug("Registered post_save + post_delete handlers for %s", cls.orm_model)
