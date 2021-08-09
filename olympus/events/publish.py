@@ -99,6 +99,9 @@ class EventPublisher:
     def get_metadata(self) -> EventMetadata:
         return EventMetadata()
 
+    def get_data_op(self) -> DataChangeEvent.DataOperation:
+        return getattr(DataChangeEvent.DataOperation, self.action.upper())
+
     def get_body(self) -> DataChangeEvent:
         data = transfer_from_orm(self.event_schema, self.instance).dict(by_alias=True)
 
@@ -113,7 +116,7 @@ class EventPublisher:
         return DataChangeEvent(
             data=data,
             data_type=self.data_type,
-            data_op=getattr(DataChangeEvent.DataOperation, self.action.upper()),
+            data_op=self.get_data_op(),
             tenant_id=self.instance.tenant_id if self.is_tenant_bound else None,
             metadata=self.get_metadata(),
         )
