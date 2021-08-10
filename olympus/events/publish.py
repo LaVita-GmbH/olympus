@@ -66,6 +66,7 @@ class EventPublisher:
 
     @classmethod
     def handle(cls, sender, instance: TDjangoModel, signal: Signal, **kwargs):
+        cls.logger.debug("%s.handle from %s with %s for %s", cls, sender, signal, instance)
         instance = cls(sender, instance, signal, **kwargs)
         instance.process()
 
