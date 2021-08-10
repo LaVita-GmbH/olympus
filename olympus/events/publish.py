@@ -58,6 +58,7 @@ class EventPublisher:
         cls.logger = logging.getLogger(f'{cls.__module__}.{cls.__name__}')
 
         cls.register()
+        cls.logger.info("Registered EventPublisher %s", cls.__name__)
 
     @classmethod
     def register(cls):
