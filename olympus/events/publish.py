@@ -142,6 +142,10 @@ class EventPublisher:
 class DataChangePublisher(with_typehint(EventPublisher)):
     @classmethod
     def register(cls):
-        receiver(post_save, sender=cls.orm_model)(partial(cls.handle, signal=post_save))
-        receiver(post_delete, sender=cls.orm_model)(partial(cls.handle, signal=post_delete))
+        cls._handle_post_save = partial(cls.handle, signal=post_save)
+        receiver(post_save, sender=cls.orm_model)(cls._handle_post_save)
+
+        cls._handle_post_delete = partial(cls.handle, signal=post_delete)
+        receiver(post_delete, sender=cls.orm_model)(cls._handle_post_delete)
+
         cls.logger.debug("Registered post_save + post_delete handlers for %s", cls.orm_model)
