@@ -459,7 +459,7 @@ def check_field_access(input: BaseModel, access: Access):
             if isinstance(value, dict):
                 check(getattr(model, key), value, access, loc=loc + [key])
 
-            else:
+            elif isinstance(value, BaseModel):
                 scopes = model.__fields__[key].field_info.extra.get('scopes')
                 if scopes:
                     if not access.token.has_audience(scopes):
