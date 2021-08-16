@@ -74,6 +74,7 @@ async def object_does_not_exist_handler(request: Request, exc: ObjectDoesNotExis
         schemas.Error(
             type=exc.__class__.__name__,
             message=str(exc),
+            code=f'not_exist:{exc.__class__.__qualname__.split(".")[0].lower()}',
         ),
         status_code=404,
     )
