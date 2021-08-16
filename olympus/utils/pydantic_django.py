@@ -457,9 +457,13 @@ def check_field_access(input: BaseModel, access: Access):
 
         for key, value in input.items():
             if isinstance(value, dict):
-                check(getattr(model, key), value, access, loc=loc + [key])
+                try:
+                    check(getattr(model, key), value, access, loc=loc + [key])
 
-            elif isinstance(value, BaseModel):
+                except AttributeError:
+                    pass
+
+            elif key in model.__fields__:
                 scopes = model.__fields__[key].field_info.extra.get('scopes')
                 if scopes:
                     if not access.token.has_audience(scopes):
