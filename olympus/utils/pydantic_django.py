@@ -5,7 +5,7 @@ from enum import Enum
 from asgiref.sync import sync_to_async, async_to_sync
 from django.db.models.query_utils import DeferredAttribute
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, validate_model, SecretStr, parse_obj_as
+from pydantic import BaseModel, validate_model, SecretStr, parse_obj_as, Field
 from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST, Undefined
 from django.db import models
 from django.db.models.manager import Manager
@@ -14,6 +14,7 @@ from django.db.transaction import atomic
 from django.utils.functional import cached_property
 from ..security.jwt import access as access_ctx
 from .django import AllowAsyncUnsafe
+from .pydantic import Reference
 from .asyncio import is_async
 from ..schemas import Access, Error, AccessScope
 from ..exceptions import AccessError
@@ -170,7 +171,13 @@ def transfer_to_orm(
 
                 for val in value:
                     def get_subobj(force_create: bool = False):
-                        obj_manytomany_fields = {**obj_fields, **{relatedmanager.target_field.attname: val.id}}
+                        obj_manytomany_fields = {**obj_fields}
+                        if getattr(val, 'id', None):
+                            obj_manytomany_fields[relatedmanager.target_field.attname] = val.id
+
+                        else:
+                            raise NotImplementedError
+
                         if force_create or action == TransferAction.CREATE:
                             return related_model(**obj_manytomany_fields)
 
@@ -202,9 +209,13 @@ def transfer_to_orm(
                 if action == TransferAction.SYNC:
                     existing_object_ids = set(related_model.objects.filter(**obj_fields).values_list('id', flat=True))
 
+                val: BaseModel
                 for val in value:
                     def get_subobj(force_create: bool = False):
-                        if force_create or action == TransferAction.CREATE or (action == TransferAction.SYNC and not getattr(val, 'id', None)):
+                        if action == TransferAction.SYNC and not getattr(val, 'id', None) and not 'sync_matching' in field.field_info.extra:
+                            force_create = True
+
+                        if force_create or action == TransferAction.CREATE:
                             create_fields = {}
                             if getattr(val, 'id', None):
                                 create_fields['id'] = getattr(val, 'id', None)
@@ -213,7 +224,35 @@ def transfer_to_orm(
 
                         elif action == TransferAction.SYNC:
                             try:
-                                return related_model.objects.get(id=val.id)
+                                if getattr(val, 'id', None):
+                                    return related_model.objects.get(id=val.id, **obj_fields)
+
+                                elif 'sync_matching' in field.field_info.extra:
+                                    matching = field.field_info.extra['sync_matching']
+                                    if isinstance(matching, list):
+                                        matching_search = models.Q()
+                                        pydantic_field_name: str
+                                        match_orm_field: models.Field
+                                        for pydantic_field_name, match_orm_field in matching:
+                                            match_value = val
+                                            for _field in pydantic_field_name.split('.'):
+                                                match_value = getattr(match_value, _field)
+
+                                            if isinstance(match_value, Reference):
+                                                match_value = match_value.id
+
+                                            matching_search &= models.Q(**{match_orm_field.field.attname: match_value})
+
+                                        return related_model.objects.filter(**obj_fields).get(matching_search)
+
+                                    elif isinstance(matching, callable):
+                                        raise NotImplementedError
+
+                                    else:
+                                        raise NotImplementedError
+
+                                else:
+                                    raise NotImplementedError
 
                             except related_model.DoesNotExist:
                                 return get_subobj(force_create=True)
