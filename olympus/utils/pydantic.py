@@ -1,6 +1,7 @@
-from typing import Callable, Dict, ForwardRef, Optional, Type, Any
+import typing
+from typing import Callable, ForwardRef, Optional, Type, Any
 from pydantic import BaseModel, create_model, Field
-from pydantic.fields import ModelField, FieldInfo, SHAPE_SINGLETON, Undefined
+from pydantic.fields import ModelField, FieldInfo, SHAPE_SINGLETON, SHAPE_LIST, Undefined
 
 
 TypingGenericAlias = type(Any)
@@ -87,6 +88,7 @@ class Reference(BaseModel):
 
 
 def include_reference(reference_key: str = '$rel', reference_params_key: str = '$rel_params'):
+    recreated_models = {}
     def wrapped(cls: Type[BaseModel]):
         def model_with_rel(c, __module__: str, __parent__module__: str):
             if isinstance(c, ForwardRef):
@@ -97,11 +99,14 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                 fields = {}
                 recreate_model = False
                 for key, field in c.__fields__.items():
-                    if field.shape != SHAPE_SINGLETON:
+                    if field.shape not in (SHAPE_SINGLETON, SHAPE_LIST):
                         fields[key] = (field.outer_type_, _new_field_from_model_field(field))
                         continue
 
                     field_type, recreated_model = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
+                    if field.type_ != field.outer_type_:
+                        field_type = getattr(typing, field.outer_type_._name)[field_type]
+
                     if field.allow_none:
                         field_type = Optional[field_type]
 
@@ -123,12 +128,15 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                         fields['x_reference_params_key'] = (dict, Field(alias=reference_params_key, orm_method=c._rel_params))
 
                 if recreate_model:
-                    return create_model(
-                        c.__qualname__,
-                        __base__=c,
-                        __module__=c.__module__ if c.__module__ != __parent__module__ else __module__,
-                        **fields,
-                    ), True
+                    if c not in recreated_models:
+                        recreated_models[c] = create_model(
+                            f'{c.__qualname__} [R]',
+                            __base__=c,
+                            __module__=c.__module__ if c.__module__ != __parent__module__ else __module__,
+                            **fields,
+                        ), True
+
+                    return recreated_models[c]
 
             return c, False
 
