@@ -90,7 +90,7 @@ class Reference(BaseModel):
 def include_reference(reference_key: str = '$rel', reference_params_key: str = '$rel_params'):
     recreated_models = {}
     def wrapped(cls: Type[BaseModel]):
-        def model_with_rel(c, __module__: str, __parent__module__: str):
+        def model_with_rel(c: Type, __parent__: Type, __module__: str, __parent__module__: str):
             if isinstance(c, ForwardRef):
                 return c, False
 
@@ -103,7 +103,7 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                         fields[key] = (field.outer_type_, _new_field_from_model_field(field))
                         continue
 
-                    field_type, recreated_model = model_with_rel(field.type_, __module__=__module__, __parent__module__=__parent__module__)
+                    field_type, recreated_model = model_with_rel(field.type_, c, __module__=__module__, __parent__module__=__parent__module__)
                     if field.type_ != field.outer_type_:
                         field_type = getattr(typing, field.outer_type_._name)[field_type]
 
@@ -134,12 +134,16 @@ def include_reference(reference_key: str = '$rel', reference_params_key: str = '
                             __base__=c,
                             __module__=c.__module__ if c.__module__ != __parent__module__ else __module__,
                             **fields,
-                        ), True
+                        )
+                        recreated_models[c].__recreated__ = True
 
-                    return recreated_models[c]
+                    if __parent__:
+                        setattr(__parent__, c.__name__, recreated_models[c])
+
+                    return recreated_models[c], True
 
             return c, False
 
-        return model_with_rel(cls, __module__=cls.__module__, __parent__module__=cls.__base__.__module__)[0]
+        return model_with_rel(cls, None, __module__=cls.__module__, __parent__module__=cls.__base__.__module__)[0]
 
     return wrapped
