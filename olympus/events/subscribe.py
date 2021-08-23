@@ -142,6 +142,12 @@ class EventSubscription:
         except Break:
             return
 
+        try:
+            self.orm_obj.updated_at = self.event.metadata.occurred_at
+
+        except AttributeError:
+            pass
+
         transfer_to_orm(self.data, self.orm_obj, action=TransferAction.SYNC)
 
         self.after_transfer()
