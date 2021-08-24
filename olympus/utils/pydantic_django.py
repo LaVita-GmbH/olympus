@@ -12,12 +12,13 @@ from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from django.db.transaction import atomic
 from django.utils.functional import cached_property
+from ..schemas import Access, Error, AccessScope
+from ..exceptions import AccessError
 from ..security.jwt import access as access_ctx
+from .sentry import instrument_span, span as span_ctx
 from .django import AllowAsyncUnsafe
 from .pydantic import Reference
 from .asyncio import is_async
-from ..schemas import Access, Error, AccessScope
-from ..exceptions import AccessError
 
 
 class TransferAction(Enum):
@@ -26,6 +27,10 @@ class TransferAction(Enum):
     NO_SUBOBJECTS = 'NO_SUBOBJECTS'
 
 
+@instrument_span(
+    op='transfer_to_orm',
+    description=lambda pydantic_obj, django_obj, *args, **kwargs: f'{pydantic_obj} to {django_obj}',
+)
 def transfer_to_orm(
     pydantic_obj: BaseModel,
     django_obj: models.Model,
@@ -64,6 +69,13 @@ def transfer_to_orm(
             access=access,
             created_submodels=created_submodels,
         )
+
+    span = span_ctx.get()
+    span.set_tag('transfer_to_orm.action', action)
+    span.set_tag('transfer_to_orm.exclude_unset', exclude_unset)
+    span.set_data('transfer_to_orm.access', access)
+    span.set_data('transfer_to_orm.pydantic_obj', pydantic_obj)
+    span.set_data('transfer_to_orm.django_obj', django_obj)
 
     if created_submodels:
         warnings.warn("Use transfer_to_orm with kwarg action instead of created_submodels", category=DeprecationWarning)
@@ -297,6 +309,10 @@ def transfer_to_orm(
 transfer_to_orm_async = sync_to_async(transfer_to_orm)
 
 
+@instrument_span(
+    op='transfer_from_orm',
+    description=lambda pydantic_cls, django_obj, *args, **kwargs: f'{django_obj} to {pydantic_cls.__name__}',
+)
 def transfer_from_orm(
     pydantic_cls: Type[BaseModel],
     django_obj: models.Model,
@@ -323,6 +339,11 @@ def transfer_from_orm(
         name: str = Field(orm_field=Address.name)
     ```
     """
+    span = span_ctx.get()
+    span.set_tag('transfer_from_orm.pydantic_cls', pydantic_cls.__name__)
+    span.set_tag('transfer_from_orm.django_cls', django_obj.__class__.__name__)
+    span.set_data('transfer_from_orm.django_obj', django_obj)
+    span.set_data('transfer_from_orm.filter_submodel', filter_submodel)
     values = {}
     for key, field in pydantic_cls.__fields__.items():
         orm_method = field.field_info.extra.get('orm_method')
