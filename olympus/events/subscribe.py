@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from django.db import models
 from ..handlers.event_consumer import message_handler
 from ..utils.pydantic_django import transfer_to_orm, TransferAction
+from ..utils.sentry import instrument_span, span as span_ctx
 from ..schemas import DataChangeEvent
 
 
@@ -64,6 +65,10 @@ class EventSubscription:
         )
 
     @classmethod
+    @instrument_span(
+        op='EventSubscription',
+        description=lambda cls, body, *args, **kwargs: f'{cls}',
+    )
     def handle(cls, body):
         instance = cls(body)
         instance.process()
@@ -72,6 +77,12 @@ class EventSubscription:
         self.body = body
         self.event = DataChangeEvent.parse_raw(self.body) if isinstance(self.body, (bytes, str)) else DataChangeEvent.parse_obj(self.body)
         self.is_new_orm_obj = False
+        self.span = span_ctx.get()
+        self.span.set_tag('exchange', self.exchange)
+        self.span.set_tag('queue', self.queue)
+        self.span.set_tag('orm_model', self.orm_model)
+        self.span.set_tag('data_op', self.event.data_op)
+        self.span.set_data('body', self.body)
 
     def process(self):
         if self.event.data_op == DataChangeEvent.DataOperation.DELETE:

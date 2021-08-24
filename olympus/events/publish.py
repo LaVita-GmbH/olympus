@@ -7,6 +7,7 @@ from django.dispatch import receiver, Signal
 from django.db.models.signals import post_save, post_delete
 from django.db import models
 from ..utils.pydantic_django import transfer_from_orm
+from ..utils.sentry import instrument_span, span as span_ctx
 from ..schemas import DataChangeEvent, EventMetadata
 from ..utils.typing import with_typehint
 
@@ -65,6 +66,10 @@ class EventPublisher:
         raise NotImplementedError
 
     @classmethod
+    @instrument_span(
+        op='EventPublisher',
+        description=lambda cls, sender, instance, signal, **kwargs: f'{cls} for {instance} via {signal}',
+    )
     def handle(cls, sender, instance: TDjangoModel, signal: Signal, **kwargs):
         cls.logger.debug("%s.handle from %s with %s for %s", cls, sender, signal, instance)
         instance = cls(sender, instance, signal, **kwargs)
@@ -81,6 +86,14 @@ class EventPublisher:
 
         elif self.signal == post_delete:
             self.action = 'delete'
+
+        span = span_ctx.get()
+        span.set_tag('exchange', self.exchange)
+        span.set_tag('routing_key', self.routing_key)
+        span.set_tag('sender', self.sender)
+        span.set_tag('signal', self.signal)
+        span.set_tag('action', self.action)
+        span.set_tag('orm_model', self.orm_model)
 
     def get_keys(self):
         return [
