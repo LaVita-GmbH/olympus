@@ -10,6 +10,7 @@ from ..utils.pydantic_django import transfer_from_orm
 from ..utils.sentry import instrument_span, span as span_ctx
 from ..schemas import DataChangeEvent, EventMetadata
 from ..utils.typing import with_typehint
+from ..utils.django import on_transaction_complete
 
 
 TBaseModel = TypeVar('TBaseModel', bound=BaseModel)
@@ -66,6 +67,7 @@ class EventPublisher:
         raise NotImplementedError
 
     @classmethod
+    @on_transaction_complete()
     @instrument_span(
         op='EventPublisher',
         description=lambda cls, sender, instance, signal, **kwargs: f'{cls} for {instance} via {signal}',
