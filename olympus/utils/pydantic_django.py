@@ -351,7 +351,11 @@ def transfer_from_orm(
             value = orm_method(django_obj)
             if value is not None and issubclass(field.type_, BaseModel) and not isinstance(value, BaseModel):
                 if field.shape == SHAPE_SINGLETON:
-                    value = field.type_.parse_obj(value)
+                    if isinstance(value, models.Model):
+                        value = async_to_sync(field.type_.from_orm)(value)
+
+                    else:
+                        value = field.type_.parse_obj(value)
 
                 elif field.shape == SHAPE_LIST:
                     def _to_pydantic(obj):
