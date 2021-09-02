@@ -324,7 +324,7 @@ def transfer_from_orm(
     django_parent_obj: Optional[models.Model] = None,
     pydantic_field_on_parent: Optional[ModelField] = None,
     filter_submodel: Optional[Mapping[Manager, models.Q]] = None,
-    use_cache: bool = True,
+    use_cache: bool = False,
     __transferred_objs_cache: Optional[Dict[Union[models.Model, Any], BaseModel]] = None,
 ) -> BaseModel:
     """
@@ -672,8 +672,8 @@ def orm_object_validator(model: Type[TDjangoModel], value: Union[str, models.Q])
 class DjangoORMBaseModel(BaseModel):
     @classmethod
     @sync_to_async
-    def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None):
-        return transfer_from_orm(cls, obj, filter_submodel=filter_submodel)
+    def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None, use_cache: bool = False):
+        return transfer_from_orm(cls, obj, filter_submodel=filter_submodel, use_cache=use_cache)
 
     class Config:
         orm_mode = True
