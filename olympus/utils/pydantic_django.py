@@ -2,7 +2,6 @@ import json
 import warnings
 from typing import List, Mapping, Optional, Tuple, Type, TypeVar, Union
 from enum import Enum
-from asgiref.sync import sync_to_async, async_to_sync
 from django.db.models.query_utils import DeferredAttribute
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validate_model, SecretStr, parse_obj_as, Field
@@ -19,6 +18,7 @@ from .sentry import instrument_span, span as span_ctx
 from .django import AllowAsyncUnsafe
 from .pydantic import Reference
 from .asyncio import is_async
+from .sync import sync_to_async, async_to_sync
 
 
 class TransferAction(Enum):

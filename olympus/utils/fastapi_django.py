@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 from enum import Enum
-from asgiref.sync import sync_to_async
+from olympus.utils.sync import sync_to_async
 from psycopg2 import errorcodes as psycopg2_error_codes
 from pydantic.error_wrappers import ErrorWrapper
 from django.db.models import Q, QuerySet, Manager, aggregates

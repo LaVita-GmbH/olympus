@@ -1,6 +1,6 @@
 import inspect
 from functools import wraps
-from typing import Callable, Union
+from typing import Callable, Optional, Union
 from sentry_sdk import start_span
 from sentry_sdk.tracing import Span
 from contextvars import ContextVar
@@ -9,7 +9,7 @@ from contextvars import ContextVar
 span: ContextVar[Span] = ContextVar('span')
 
 
-def instrument_span(op: str, description: Union[str, Callable], **instrument_kwargs):
+def instrument_span(op: str, description: Optional[Union[str, Callable]] = None, **instrument_kwargs):
     def wrapper(wrapped):
         @wraps(wrapped)
         def with_instrumentation(*args, **kwargs):

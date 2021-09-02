@@ -1,5 +1,5 @@
 from typing import List, Optional
-from asgiref.sync import sync_to_async
+from olympus.utils.sync import sync_to_async
 from fastapi import Query
 from ..schemas import Pagination
 
