@@ -20,7 +20,7 @@ from .sentry import instrument_span, span as span_ctx
 from .django import AllowAsyncUnsafe
 from .pydantic import Reference
 from .asyncio import is_async
-from .sync import sync_to_async, async_to_sync
+from .sync import sync_to_async
 
 
 class TransferAction(Enum):
@@ -306,9 +306,6 @@ def transfer_to_orm(
                 if action == TransferAction.SYNC:
                     for obj in existing_objects:
                         obj.delete()
-
-
-transfer_to_orm_async = sync_to_async(transfer_to_orm)
 
 
 _transfer_from_orm_context_cache: ContextVar[dict] = ContextVar('_transfer_from_orm_context_cache')
