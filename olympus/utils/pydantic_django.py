@@ -676,8 +676,8 @@ def orm_object_validator(model: Type[TDjangoModel], value: Union[str, models.Q])
 
 class DjangoORMBaseModel(BaseModel):
     @classmethod
-    async def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None, use_cache: bool = False):
-        return await transfer_from_orm(cls, obj, filter_submodel=filter_submodel, use_cache=use_cache)
+    def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None, use_cache: bool = False):
+        return transfer_from_orm(cls, obj, filter_submodel=filter_submodel, use_cache=use_cache)
 
     class Config:
         orm_mode = True
