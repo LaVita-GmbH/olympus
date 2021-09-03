@@ -1,6 +1,7 @@
 import json
 import warnings
 import time
+import asyncio
 from typing import Any, Callable, Coroutine, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Dict
 from enum import Enum
 from django.db.models.query_utils import DeferredAttribute
@@ -354,6 +355,7 @@ def transfer_from_orm(
             django_obj=django_obj,
             filter_submodel=filter_submodel,
             use_cache=use_cache,
+            thread_sensitive=thread_sensitive,
         )
 
     if __transferred_objs_cache is None:
@@ -397,7 +399,7 @@ def transfer_from_orm(
             if value is not None and issubclass(field.type_, BaseModel) and not isinstance(value, BaseModel):
                 if field.shape == SHAPE_SINGLETON:
                     if isinstance(value, models.Model):
-                        value = cache(value, lambda: async_to_sync(field.type_.from_orm)(value))
+                        value = cache(value, lambda: asyncio.run(field.type_.from_orm(value)))
 
                     else:
                         value = cache(value, lambda: field.type_.parse_obj(value))
@@ -408,7 +410,7 @@ def transfer_from_orm(
                             return obj
 
                         if isinstance(obj, models.Model):
-                            return async_to_sync(field.type_.from_orm)(obj)
+                            return asyncio.run(field.type_.from_orm(obj))
 
                         return field.type_.parse_obj(obj)
 
