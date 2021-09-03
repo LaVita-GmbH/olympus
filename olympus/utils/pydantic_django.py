@@ -1,7 +1,7 @@
 import json
 import warnings
 import time
-from typing import Any, Callable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Dict
+from typing import Any, Callable, Coroutine, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Dict
 from enum import Enum
 from django.db.models.query_utils import DeferredAttribute
 from fastapi.exceptions import RequestValidationError
@@ -325,8 +325,9 @@ def transfer_from_orm(
     pydantic_field_on_parent: Optional[ModelField] = None,
     filter_submodel: Optional[Mapping[Manager, models.Q]] = None,
     use_cache: bool = False,
+    thread_sensitive: bool = True,
     __transferred_objs_cache: Optional[Dict[Union[models.Model, Any], BaseModel]] = None,
-) -> BaseModel:
+) -> Union[BaseModel, Coroutine[None, None, BaseModel]]:
     """
     Transfers the field contents of django_obj to a new instance of pydantic_cls.
     For this to work it is required to have orm_field set on all of the pydantic_obj's fields, which has to point to the django model attribute.
@@ -346,6 +347,14 @@ def transfer_from_orm(
         name: str = Field(orm_field=Address.name)
     ```
     """
+
+    if is_async():
+        return sync_to_async(transfer_from_orm, thread_sensitive=thread_sensitive)(
+            pydantic_cls=pydantic_cls,
+            django_obj=django_obj,
+            filter_submodel=filter_submodel,
+            use_cache=use_cache,
+        )
 
     if __transferred_objs_cache is None:
         try:
@@ -671,9 +680,8 @@ def orm_object_validator(model: Type[TDjangoModel], value: Union[str, models.Q])
 
 class DjangoORMBaseModel(BaseModel):
     @classmethod
-    @sync_to_async
-    def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None, use_cache: bool = False):
-        return transfer_from_orm(cls, obj, filter_submodel=filter_submodel, use_cache=use_cache)
+    async def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None, use_cache: bool = False, thread_sensitive: bool = True):
+        return await transfer_from_orm(cls, obj, filter_submodel=filter_submodel, use_cache=use_cache, thread_sensitive=thread_sensitive)
 
     class Config:
         orm_mode = True
