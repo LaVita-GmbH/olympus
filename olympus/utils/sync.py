@@ -1,6 +1,7 @@
 from typing import Callable, Optional
 from functools import wraps
 from asgiref import sync
+from asgiref.sync import ThreadSensitiveContext
 from .sentry import instrument_span, span as span_ctx
 
 
