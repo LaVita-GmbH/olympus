@@ -20,7 +20,7 @@ from .sentry import instrument_span, span as span_ctx
 from .django import AllowAsyncUnsafe
 from .pydantic import Reference
 from .asyncio import is_async
-from .sync import sync_to_async, ThreadSensitiveContext
+from .sync import sync_to_async
 
 
 class TransferAction(Enum):
