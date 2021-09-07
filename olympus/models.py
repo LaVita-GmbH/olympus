@@ -1,5 +1,6 @@
 from typing import Optional, Callable
 from django.db import models
+from django.db.models import Func, Value, CharField, JSONField
 from django.db.transaction import atomic
 from .schemas import Access
 from .exceptions import AccessError
@@ -37,3 +38,24 @@ class AccessMixin(models.Model):
 
     class Meta:
         abstract = True
+
+
+class JSONArrayElements(Func):
+    function = 'jsonb_array_elements'
+    arity = 1
+
+
+class JSONExtractPath(Func):
+    function = 'jsonb_extract_path'
+    arity = 2
+
+    def __init__(self, jsonb, path):
+        super().__init__(jsonb, Value(path, output_field=CharField()), output_field=JSONField())
+
+
+class JSONExtractPathText(Func):
+    function = 'jsonb_extract_path_text'
+    arity = 2
+
+    def __init__(self, jsonb, path):
+        super().__init__(jsonb, Value(path, output_field=CharField()), output_field=CharField())
