@@ -404,7 +404,14 @@ def transfer_from_orm(
                             return obj
 
                         if isinstance(obj, models.Model):
-                            return transfer_from_orm(field.type_, obj)
+                            return transfer_from_orm(
+                                pydantic_cls=field.type_,
+                                django_obj=obj,
+                                django_parent_obj=django_obj,
+                                filter_submodel=filter_submodel,
+                                use_cache=use_cache,
+                                __transferred_objs_cache=__transferred_objs_cache,
+                            )
 
                         return field.type_.parse_obj(obj)
 
@@ -459,6 +466,7 @@ def transfer_from_orm(
                             django_obj=rel_obj,
                             django_parent_obj=django_obj,
                             pydantic_field_on_parent=field,
+                            filter_submodel=filter_submodel,
                             __transferred_objs_cache=__transferred_objs_cache,
                         )) for rel_obj in related_objs
                     ]
@@ -471,6 +479,7 @@ def transfer_from_orm(
                     pydantic_cls=field.type_,
                     django_obj=django_obj,
                     pydantic_field_on_parent=field,
+                    filter_submodel=filter_submodel,
                     __transferred_objs_cache=__transferred_objs_cache,
                 ))
 
