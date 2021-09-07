@@ -161,10 +161,10 @@ def transfer_to_orm(
 
                 if isinstance(orm_field.field, models.JSONField) and value:
                     if isinstance(value, BaseModel):
-                        value = value.json()
+                        value = value.dict()
 
                     elif isinstance(value, dict):
-                        value = json.dumps(value)
+                        pass
 
                     else:
                         raise NotImplementedError
