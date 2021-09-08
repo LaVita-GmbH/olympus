@@ -308,9 +308,6 @@ def transfer_to_orm(
                         obj.delete()
 
 
-_transfer_from_orm_context_cache: ContextVar[dict] = ContextVar('_transfer_from_orm_context_cache')
-
-
 @instrument_span(
     op='transfer_from_orm',
     description=lambda pydantic_cls, django_obj, *args, **kwargs: f'{django_obj} to {pydantic_cls.__name__}',
@@ -321,8 +318,6 @@ def transfer_from_orm(
     django_parent_obj: Optional[models.Model] = None,
     pydantic_field_on_parent: Optional[ModelField] = None,
     filter_submodel: Optional[Mapping[Manager, models.Q]] = None,
-    use_cache: bool = False,
-    __transferred_objs_cache: Optional[Dict[Union[models.Model, Any], BaseModel]] = None,
 ) -> Union[BaseModel, Coroutine[None, None, BaseModel]]:
     """
     Transfers the field contents of django_obj to a new instance of pydantic_cls.
@@ -349,36 +344,7 @@ def transfer_from_orm(
             pydantic_cls=pydantic_cls,
             django_obj=django_obj,
             filter_submodel=filter_submodel,
-            use_cache=use_cache,
         )
-
-    if __transferred_objs_cache is None:
-        try:
-            __transferred_objs_cache = _transfer_from_orm_context_cache.get()
-        
-        except LookupError:
-            __transferred_objs_cache = {}
-            _transfer_from_orm_context_cache.set(__transferred_objs_cache)
-
-    TObj = TypeVar('TObj')
-    def cache(key, callable: Callable[[], TObj], cache_validity: float = 1.0) -> TObj:
-        if not use_cache or key is None:
-            return callable()
-
-        if isinstance(key, dict):
-            key = id(dict)
-
-        try:
-            if key not in __transferred_objs_cache:
-                __transferred_objs_cache[key] = callable(), time.time()
-
-            elif __transferred_objs_cache[key][1] < time.time() - cache_validity:
-                __transferred_objs_cache[key] = callable(), time.time()
-
-            return __transferred_objs_cache[key][0]
-
-        except Exception as error:
-            return callable()
 
     span = span_ctx.get()
     span.set_tag('transfer_from_orm.pydantic_cls', pydantic_cls.__name__)
@@ -393,10 +359,10 @@ def transfer_from_orm(
             if value is not None and issubclass(field.type_, BaseModel) and not isinstance(value, BaseModel):
                 if field.shape == SHAPE_SINGLETON:
                     if isinstance(value, models.Model):
-                        value = cache(value, lambda: transfer_from_orm(field.type_, value))
+                        value = transfer_from_orm(field.type_, value)
 
                     else:
-                        value = cache(value, lambda: field.type_.parse_obj(value))
+                        value = field.type_.parse_obj(value)
 
                 elif field.shape == SHAPE_LIST:
                     def _to_pydantic(obj):
@@ -409,14 +375,12 @@ def transfer_from_orm(
                                 django_obj=obj,
                                 django_parent_obj=django_obj,
                                 filter_submodel=filter_submodel,
-                                use_cache=use_cache,
-                                __transferred_objs_cache=__transferred_objs_cache,
                             )
 
                         return field.type_.parse_obj(obj)
 
                     value = [
-                        cache(obj, lambda: _to_pydantic(obj))
+                        _to_pydantic(obj)
                         for obj in value
                     ]
 
@@ -461,27 +425,25 @@ def transfer_from_orm(
                         raise NotImplementedError
 
                     values[field.name] = [
-                        cache(rel_obj, lambda: transfer_from_orm(
+                        transfer_from_orm(
                             pydantic_cls=field.type_,
                             django_obj=rel_obj,
                             django_parent_obj=django_obj,
                             pydantic_field_on_parent=field,
                             filter_submodel=filter_submodel,
-                            __transferred_objs_cache=__transferred_objs_cache,
-                        )) for rel_obj in related_objs
+                        ) for rel_obj in related_objs
                     ]
 
                 else:
                     raise NotImplementedError
 
             elif not orm_field and issubclass(field.type_, BaseModel):
-                values[field.name] = cache((django_obj, field), lambda: transfer_from_orm(
+                values[field.name] = transfer_from_orm(
                     pydantic_cls=field.type_,
                     django_obj=django_obj,
                     pydantic_field_on_parent=field,
                     filter_submodel=filter_submodel,
-                    __transferred_objs_cache=__transferred_objs_cache,
-                ))
+                )
 
             else:
                 value = None
@@ -491,10 +453,10 @@ def transfer_from_orm(
                 try:
                     if is_property:
                         if isinstance(orm_field, property):
-                            value = cache((django_obj, orm_field), lambda: orm_field.fget(django_obj))
+                            value = orm_field.fget(django_obj)
 
                         elif isinstance(orm_field, cached_property):
-                            value = cache((django_obj, orm_field), lambda: orm_field.__get__(django_obj))
+                            value = orm_field.__get__(django_obj)
 
                         else:
                             raise NotImplementedError
@@ -514,19 +476,19 @@ def transfer_from_orm(
                 if is_django_field and value and isinstance(orm_field.field, models.JSONField):
                     if issubclass(field.type_, BaseModel):
                         if isinstance(value, dict):
-                            value = cache(value, lambda: field.type_.parse_obj(value))
+                            value = field.type_.parse_obj(value)
 
                         else:
-                            value = cache(value, lambda: field.type_.parse_raw(value))
+                            value = field.type_.parse_raw(value)
 
                     elif issubclass(field.type_, dict):
                         if isinstance(value, str):
-                            value = cache(value, lambda: json.loads(value))
+                            value = json.loads(value)
 
                     else:
                         raise NotImplementedError
 
-                scopes = cache(('access', field), lambda: [AccessScope.from_str(audience) for audience in field.field_info.extra.get('scopes', [])])
+                scopes = [AccessScope.from_str(audience) for audience in field.field_info.extra.get('scopes', [])]
                 if scopes:
                     try:
                         access = access_ctx.get()
@@ -685,8 +647,8 @@ def orm_object_validator(model: Type[TDjangoModel], value: Union[str, models.Q])
 
 class DjangoORMBaseModel(BaseModel):
     @classmethod
-    def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None, use_cache: bool = False):
-        return transfer_from_orm(cls, obj, filter_submodel=filter_submodel, use_cache=use_cache)
+    def from_orm(cls, obj: models.Model, filter_submodel: Optional[Mapping[Manager, models.Q]] = None):
+        return transfer_from_orm(cls, obj, filter_submodel=filter_submodel)
 
     class Config:
         orm_mode = True
