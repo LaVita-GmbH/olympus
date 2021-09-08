@@ -1,4 +1,5 @@
 from typing import Callable, Optional
+from asyncio import iscoroutinefunction, coroutine
 from functools import wraps
 from asgiref import sync
 from asgiref.sync import ThreadSensitiveContext
@@ -19,7 +20,7 @@ def sync_to_async(callable: Optional[Callable] = None, **wrapper_kwargs):
     if callable is None:
         return lambda c: sync_to_async(c, **wrapper_kwargs)
 
-    return wrapper
+    return coroutine(wrapper)
 
 
 def async_to_sync(callable: Optional[Callable] = None, **wrapper_kwargs):
