@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import IntegrityError
+from django.db.models import RestrictedError, ProtectedError
 
 try:
     import sentry_sdk
@@ -82,16 +83,20 @@ async def object_does_not_exist_handler(request: Request, exc: ObjectDoesNotExis
 
 async def integrity_error_handler(request: Request, exc: IntegrityError):
     capture_exception(exc)
-    code = psycopg2_error_lookup(exc.__cause__.pgcode).lower()
-    try:
-        if exc.__cause__.diag.constraint_name:
-            code += ":" + exc.__cause__.diag.constraint_name
+    if isinstance(exc, (RestrictedError, ProtectedError)):
+        code = None
 
-        elif exc.__cause__.diag.column_name:
-            code += ":" + exc.__cause__.diag.column_name
+    elif exc.__cause__:
+        code = psycopg2_error_lookup(exc.__cause__.pgcode).lower()
+        try:
+            if exc.__cause__.diag.constraint_name:
+                code += ":" + exc.__cause__.diag.constraint_name
 
-    except AttributeError:
-        pass
+            elif exc.__cause__.diag.column_name:
+                code += ":" + exc.__cause__.diag.column_name
+
+        except AttributeError:
+            pass
 
     return await respond_details(
         request,
