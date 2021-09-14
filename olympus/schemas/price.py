@@ -9,6 +9,9 @@ class AmountPrecision(BaseModel):
     gross: Decimal
     net: Decimal
 
+    def __getitem__(self, name):
+        return getattr(self, name)
+
 
 class Amount(AmountPrecision):
     @validator('gross', 'net')
