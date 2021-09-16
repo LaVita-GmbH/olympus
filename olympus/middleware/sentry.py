@@ -13,7 +13,7 @@ class SentryAsgiMiddleware(BaseSentryAsgiMiddleware):
     async def _run_asgi3(self, scope, receive, send):
         async def _send(message: Message):
             message.get('headers', list()).append(
-                (b'X-Flow-ID', Hub.current.scope.transaction.trace_id)
+                (b'X-Flow-ID', Hub.current.scope.transaction.to_traceparent())
             )
             await send(message)
 

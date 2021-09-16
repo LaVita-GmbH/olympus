@@ -34,18 +34,12 @@ def transaction_captured_function(func, transaction_name: Optional[str] = None):
         except IndexError:
             pass
 
-        transaction_options = {
-            'op': 'message_handler',
-            'name': transaction_name or f'{func.__module__}.{func.__name__}',
-        }
-        transaction = Transaction.from_traceparent(
-            flow_id,
-            hub=Hub.current,
-            **transaction_options,
-        ) if flow_id else start_transaction(
-            **transaction_options,
+        transaction = Transaction.continue_from_headers(
+            {'sentry-trace': flow_id},
+            op='message_handler',
+            name=transaction_name or f'{func.__module__}.{func.__name__}',
         )
-        with transaction:
+        with Hub.current.start_transaction(transaction):
             result = func(*args, **kwargs)
 
         _logger.debug("Logged message handling with trace_id=%s, span_id=%s, id=%s", transaction.trace_id, transaction.span_id, last_event_id())
