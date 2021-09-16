@@ -18,14 +18,14 @@ def default_eid():
 
 
 def _get_flow_id():
-    if sentry_sdk:
-        try:
-            return sentry_sdk.Hub.current.scope.transaction.trace_id
+    try:
+        if sentry_sdk.Hub.current.scope.span:
+            return sentry_sdk.Hub.current.scope.span.to_traceparent()
 
-        except (KeyError, AttributeError, IndexError, TypeError):
-            pass
+        return sentry_sdk.Hub.current.scope.transaction.trace_id
 
-    return None
+    except (KeyError, AttributeError, IndexError, TypeError):
+        return None
 
 
 def _get_uid() -> Optional[str]:
