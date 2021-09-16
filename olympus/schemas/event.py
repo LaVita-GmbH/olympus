@@ -19,10 +19,7 @@ def default_eid():
 
 def _get_flow_id():
     try:
-        if sentry_sdk.Hub.current.scope.span:
-            return sentry_sdk.Hub.current.scope.span.to_traceparent()
-
-        return sentry_sdk.Hub.current.scope.transaction.trace_id
+        return sentry_sdk.Hub.current.scope.transaction.to_traceparent()
 
     except (KeyError, AttributeError, IndexError, TypeError):
         return None
