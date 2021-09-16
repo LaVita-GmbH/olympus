@@ -11,7 +11,7 @@ from sentry_sdk import start_transaction, last_event_id
 _logger = logging.getLogger(__name__)
 
 
-def transaction_captured_function(func):
+def transaction_captured_function(func, transaction_name: Optional[str] = None):
     @wraps(func)
     def wrapper(*args, **kwargs):
         trace_id = data = None
@@ -35,7 +35,7 @@ def transaction_captured_function(func):
 
         transaction = start_transaction(
             op='message_handler',
-            name=f'{func.__module__}.{func.__name__}',
+            name=transaction_name or f'{func.__module__}.{func.__name__}',
             trace_id=trace_id,
         )
         with transaction:
@@ -52,6 +52,7 @@ def message_handler(
     queue: Optional[str] = None,
     exchange: str = DEFAULT_EXCHANGE,
     queue_arguments: Optional[Dict[str, object]] = None,
+    transaction_name: Optional[str] = None
 ):
     def decorator(func):
         return base_message_handler(
@@ -59,6 +60,6 @@ def message_handler(
             queue=queue,
             exchange=exchange,
             queue_arguments=queue_arguments,
-        )(serverless_function(transaction_captured_function(func)))
+        )(serverless_function(transaction_captured_function(func, transaction_name=transaction_name)))
 
     return decorator

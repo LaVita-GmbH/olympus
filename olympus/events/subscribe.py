@@ -41,13 +41,14 @@ class EventSubscription:
         cls.exchange = exchange
         cls.queue_arguments = queue_arguments
         cls.delete_on_status = delete_on_status
-        cls.logger = logging.getLogger(f'{cls.__module__}.{cls.__name__}')
+        cls.logger = logging.getLogger(f'{cls.__module__}.{cls.__qualname__}')
 
         message_handler(
             routing_keys=cls.routing_keys,
             queue=cls.queue,
             exchange=cls.exchange,
             queue_arguments=cls.queue_arguments,
+            transaction_name=f'{cls.__module__}.{cls.__qualname__}',
         )(cls.handle)
 
         if not hasattr(cls.orm_model, 'updated_at'):
