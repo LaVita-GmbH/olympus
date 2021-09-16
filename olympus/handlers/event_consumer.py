@@ -5,7 +5,8 @@ from functools import wraps
 from event_consumer import message_handler as base_message_handler
 from event_consumer.handlers import DEFAULT_EXCHANGE
 from sentry_sdk.integrations.serverless import serverless_function
-from sentry_sdk import start_transaction, last_event_id
+from sentry_sdk import start_transaction, last_event_id, Hub
+from sentry_sdk.tracing import Transaction
 
 
 _logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ _logger = logging.getLogger(__name__)
 def transaction_captured_function(func, transaction_name: Optional[str] = None):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        trace_id = data = None
+        flow_id = data = None
 
         try:
             if isinstance(args[0], (str, bytes)):
@@ -28,15 +29,21 @@ def transaction_captured_function(func, transaction_name: Optional[str] = None):
                 data = args[0]
 
             if data:
-                trace_id = data.get('metadata', {}).get('flow_id')
+                flow_id = data.get('metadata', {}).get('flow_id')
 
         except IndexError:
             pass
 
-        transaction = start_transaction(
-            op='message_handler',
-            name=transaction_name or f'{func.__module__}.{func.__name__}',
-            trace_id=trace_id,
+        transaction_options = {
+            'op': 'message_handler',
+            'name': transaction_name or f'{func.__module__}.{func.__name__}',
+        }
+        transaction = Transaction.from_traceparent(
+            flow_id,
+            hub=Hub.current,
+            **transaction_options,
+        ) if flow_id else start_transaction(
+            **transaction_options,
         )
         with transaction:
             result = func(*args, **kwargs)
