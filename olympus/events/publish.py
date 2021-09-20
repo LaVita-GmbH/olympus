@@ -18,6 +18,8 @@ TDjangoModel = TypeVar('TDjangoModel', bound=models.Model)
 
 
 class EventPublisher:
+    action = 'update'
+
     def __init_subclass__(
         cls,
         orm_model: Type[TDjangoModel],
@@ -83,25 +85,11 @@ class EventPublisher:
         self.signal = signal
         self.kwargs = kwargs
 
-        if self.signal == post_save:
-            self.action = 'create' if self.kwargs.get('created') else 'update'
-
-        elif self.signal == post_delete:
-            self.action = 'delete'
-
-        span = span_ctx.get()
-        span.set_tag('exchange', self.exchange)
-        span.set_tag('routing_key', self.routing_key)
-        span.set_tag('sender', self.sender)
-        span.set_tag('signal', self.signal)
-        span.set_tag('action', self.action)
-        span.set_tag('orm_model', self.orm_model)
-
     def get_keys(self):
         return [
             self.version,
             self.type,
-            self.action,
+            self.action
         ]
 
     @property
@@ -117,7 +105,7 @@ class EventPublisher:
         return EventMetadata()
 
     def get_data_op(self) -> DataChangeEvent.DataOperation:
-        return getattr(DataChangeEvent.DataOperation, self.action.upper())
+        return DataChangeEvent.DataOperation.UPDATE
 
     def get_body(self) -> DataChangeEvent:
         data = transfer_from_orm(self.event_schema, self.instance).dict(by_alias=True)
@@ -144,6 +132,13 @@ class EventPublisher:
         }
 
     def process(self):
+        span = span_ctx.get()
+        span.set_tag('exchange', self.exchange)
+        span.set_tag('routing_key', self.routing_key)
+        span.set_tag('sender', self.sender)
+        span.set_tag('signal', self.signal)
+        span.set_tag('orm_model', self.orm_model)
+
         self.logger.debug("Publish DataChangeEvent for %s with schema %s on %r", self.orm_model, self.event_schema, self.exchange)
         self.producer.publish(
             retry=True,
@@ -155,6 +150,17 @@ class EventPublisher:
 
 
 class DataChangePublisher(with_typehint(EventPublisher)):
+    @property
+    def action(self):
+        if self.signal == post_save:
+            return 'create' if self.kwargs.get('created') else 'update'
+
+        elif self.signal == post_delete:
+            return 'delete'
+
+    def get_data_op(self) -> DataChangeEvent.DataOperation:
+        return getattr(DataChangeEvent.DataOperation, self.get_action().upper())
+
     @classmethod
     def register(cls):
         cls._handle_post_save = partial(cls.handle, signal=post_save)
@@ -167,7 +173,9 @@ class DataChangePublisher(with_typehint(EventPublisher)):
 
 
 class StatusChangePublisher(with_typehint(EventPublisher)):
-    action = 'update'
+    @property
+    def action(self):
+        return self.instance.status
 
     @classmethod
     def register(cls):
