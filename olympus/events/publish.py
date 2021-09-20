@@ -159,7 +159,7 @@ class DataChangePublisher(with_typehint(EventPublisher)):
             return 'delete'
 
     def get_data_op(self) -> DataChangeEvent.DataOperation:
-        return getattr(DataChangeEvent.DataOperation, self.get_action().upper())
+        return getattr(DataChangeEvent.DataOperation, self.action.upper())
 
     @classmethod
     def register(cls):
