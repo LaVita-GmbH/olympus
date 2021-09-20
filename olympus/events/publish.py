@@ -175,7 +175,7 @@ class DataChangePublisher(with_typehint(EventPublisher)):
 class StatusChangePublisher(with_typehint(EventPublisher)):
     @property
     def action(self):
-        return self.instance.status
+        return str(self.instance.status).lower()
 
     @classmethod
     def register(cls):
