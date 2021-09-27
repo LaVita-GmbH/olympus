@@ -9,6 +9,12 @@ from ..handlers.event_consumer import message_handler
 from ..utils.pydantic_django import transfer_to_orm, TransferAction
 from ..utils.sentry import instrument_span, span as span_ctx
 from ..schemas import DataChangeEvent
+try:
+    from sentry_sdk import set_extra
+
+except ImportError:
+    def set_extra(key, data):
+        pass
 
 
 TBaseModel = TypeVar('TBaseModel', bound=BaseModel)
@@ -84,6 +90,7 @@ class EventSubscription:
         self.span.set_tag('orm_model', self.orm_model)
         self.span.set_tag('data_op', self.event.data_op)
         self.span.set_data('body', self.body)
+        set_extra('body', self.body)
 
     def process(self):
         if self.event.data_op == DataChangeEvent.DataOperation.DELETE:
