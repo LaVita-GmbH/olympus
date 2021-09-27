@@ -8,6 +8,16 @@ from starlette.requests import Request
 from ..schemas import Error, Access, AccessToken, AccessScope
 from ..exceptions import AuthError
 
+try:
+    from sentry_sdk import set_user, set_extra
+
+except ImportError:
+    def set_user(data):
+        pass
+
+    def set_extra(key, data):
+        pass
+
 
 access: ContextVar[Access] = ContextVar('access')
 
@@ -51,6 +61,11 @@ class JWTToken(APIKeyHeader):
             token=AccessToken(**self.decode_token(token)),
         )
 
+        set_user({
+            'id': current_access.user_id,
+            'tenant_id': current_access.tenant_id,
+        })
+
         if scopes:
             audiences = current_access.token.has_audiences(scopes.scopes)
             if not audiences:
@@ -64,6 +79,7 @@ class JWTToken(APIKeyHeader):
             aud_scopes = [AccessScope.from_str(audience) for audience in audiences]
             current_access.scopes = aud_scopes
             current_access.scope = aud_scopes[0]
+            set_extra('access.scopes', aud_scopes)
 
         access.set(current_access)
 
