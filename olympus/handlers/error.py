@@ -7,7 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.utils import IntegrityError
+from django.db.utils import IntegrityError, OperationalError
 from django.db.models import RestrictedError, ProtectedError
 
 try:
@@ -123,4 +123,10 @@ async def jose_error_handler(request: Request, exc: JOSEError):
 
 
 async def generic_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, NotImplementedError):
+        return await respond_details(request, schemas.Error(type='InternalServerError'), status_code=501)
+
+    if isinstance(exc, OperationalError):
+        return await respond_details(request, schemas.Error(type='OperationalError'), status_code=503)
+
     return await respond_details(request, schemas.Error(type='InternalServerError'))
