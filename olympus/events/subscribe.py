@@ -37,6 +37,7 @@ class EventSubscription:
         exchange: str = DEFAULT_EXCHANGE,
         queue_arguments: Optional[Dict[str, object]] = None,
         delete_on_status: Optional[Any] = None,
+        create_only_on_op_create: bool = False,
         **kwargs,
     ):
         super().__init_subclass__(**kwargs)
@@ -47,6 +48,7 @@ class EventSubscription:
         cls.exchange = exchange
         cls.queue_arguments = queue_arguments
         cls.delete_on_status = delete_on_status
+        cls.create_only_on_op_create = create_only_on_op_create
         cls.logger = logging.getLogger(f'{cls.__module__}.{cls.__qualname__}')
 
         message_handler(
@@ -108,12 +110,14 @@ class EventSubscription:
                 query &= models.Q(tenant_id=self.event.tenant_id)
 
             self.__orm_obj = self.orm_model.objects.get(query)
+            set_extra('orm_obj', self.__orm_obj)
 
         return self.__orm_obj
 
     @orm_obj.setter
     def orm_obj(self, value):
         self.__orm_obj = value
+        set_extra('orm_obj', self.__orm_obj)
 
     def create_orm_obj(self, data: TBaseModel):
         fields = {'id': data.id}
@@ -146,13 +150,17 @@ class EventSubscription:
         try:
             try:
                 if self.orm_obj.updated_at > self.event.metadata.occurred_at:
-                    self.logger.warning("Received data older than last record update for %s. Discarding change!", self.orm_obj)
+                    self.logger.warning("Received data older than last record update. Discarding change!", stack_info=True)
                     return
 
             except AttributeError:
                 pass
 
         except self.orm_model.DoesNotExist:
+            if self.create_only_on_op_create and self.event.data_op != DataChangeEvent.DataOperation.CREATE:
+                self.logger.warning("Received object to update which does not exist. Discarding change!", stack_info=True)
+                return
+
             self.create_orm_obj(self.data)
 
         try:
