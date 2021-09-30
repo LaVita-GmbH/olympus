@@ -8,7 +8,8 @@ from django.db import models
 from ..handlers.event_consumer import message_handler
 from ..utils.pydantic_django import transfer_to_orm, TransferAction
 from ..utils.sentry import instrument_span, span as span_ctx
-from ..schemas import DataChangeEvent
+from ..security.jwt import access as access_ctx
+from ..schemas import DataChangeEvent, Access, AccessToken
 try:
     from sentry_sdk import set_extra
 
@@ -85,6 +86,23 @@ class EventSubscription:
     def __init__(self, body):
         self.body = body
         self.event = DataChangeEvent.parse_raw(self.body) if isinstance(self.body, (bytes, str)) else DataChangeEvent.parse_obj(self.body)
+
+        if self.event.metadata.user:
+            access_ctx.set(Access(
+                token=AccessToken(
+                    iss='int',
+                    iat=0,
+                    nbf=0,
+                    exp=0,
+                    sub=self.event.metadata.user.uid,
+                    ten=self.event.tenant_id,
+                    aud=self.event.metadata.user.scopes,
+                    rls=self.event.metadata.user.roles,
+                    jti='int',
+                    crt=False,
+                ),
+            ))
+
         self.is_new_orm_obj = False
         self.span = span_ctx.get()
         self.span.set_tag('exchange', self.exchange)
