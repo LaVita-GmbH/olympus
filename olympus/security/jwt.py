@@ -60,6 +60,7 @@ class JWTToken(APIKeyHeader):
         current_access = Access(
             token=AccessToken(**self.decode_token(token)),
         )
+        set_extra('access.token.aud', current_access.token.aud)
 
         set_user({
             'id': current_access.user_id,

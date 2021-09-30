@@ -49,6 +49,15 @@ class AccessToken(BaseModel):
         audiences = [AccessScope.from_str(audience) for audience in self.aud]
         return audiences
 
+    def __contains__(self, item):
+        if isinstance(item, AccessScope):
+            return str(item) in self.aud
+
+        if isinstance(item, str):
+            return item in self.aud
+
+        raise NotImplementedError
+
 
 class AccessScope(BaseModel):
     service: str
