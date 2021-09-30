@@ -46,7 +46,7 @@ class AccessToken(BaseModel):
         return [audience for audience in audiences if audience in self.aud]
 
     def get_scopes(self):
-        audiences = set([AccessScope.from_str(audience) for audience in self.aud])
+        audiences = [AccessScope.from_str(audience) for audience in self.aud]
         return audiences
 
 
