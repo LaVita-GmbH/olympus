@@ -47,18 +47,18 @@ def _get_roles() -> list:
         return []
 
 
+def _get_user():
+    if not _get_uid():
+        return
+
+    return EventMetadata.User()
+
+
 class EventMetadata(BaseModel):
     class User(BaseModel):
         uid: Optional[str] = Field(default_factory=_get_uid)
         scopes: List[str] = Field(default_factory=_get_scopes)
         roles: List[str] = Field(default_factory=_get_roles)
-
-    @classmethod
-    def _get_user(cls):
-        if not _get_uid():
-            return
-
-        return cls.User()
 
     eid: str = Field(min_length=64, max_length=64, default_factory=default_eid)
     event_type: Optional[str]
