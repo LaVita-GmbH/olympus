@@ -87,7 +87,7 @@ class EventSubscription:
         self.body = body
         self.event = DataChangeEvent.parse_raw(self.body) if isinstance(self.body, (bytes, str)) else DataChangeEvent.parse_obj(self.body)
 
-        if self.event.metadata.user:
+        if self.event.metadata.user and self.event.metadata.user.uid:
             access_ctx.set(Access(
                 token=AccessToken(
                     iss='int',
