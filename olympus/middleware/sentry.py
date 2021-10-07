@@ -12,9 +12,14 @@ class SentryAsgiMiddleware(BaseSentryAsgiMiddleware):
 
     async def _run_asgi3(self, scope, receive, send):
         async def _send(message: Message):
-            message.get('headers', list()).append(
-                (b'X-Flow-ID', Hub.current.scope.transaction.to_traceparent())
-            )
+            try:
+                message.get('headers', list()).append(
+                    (b'X-Flow-ID', Hub.current.scope.transaction.to_traceparent())
+                )
+
+            except AttributeError:
+                pass
+
             await send(message)
 
         return await self._run_app(scope, lambda: self.app(scope, receive, _send))
