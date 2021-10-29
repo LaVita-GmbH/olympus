@@ -299,13 +299,13 @@ def transfer_to_orm(
         with atomic():
             django_obj.save()
 
-            if action != TransferAction.NO_SUBOBJECTS:
-                for obj in subobjects:
-                    obj.save()
-
+            if action in (TransferAction.CREATE, TransferAction.SYNC):
                 if action == TransferAction.SYNC:
                     for obj in existing_objects:
                         obj.delete()
+
+                for obj in subobjects:
+                    obj.save()
 
 
 @instrument_span(
