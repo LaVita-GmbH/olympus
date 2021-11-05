@@ -1,5 +1,5 @@
 from typing import Callable, Optional
-from asyncio import iscoroutinefunction, coroutine
+from asyncio import coroutine
 from functools import wraps
 from asgiref import sync
 from asgiref.sync import ThreadSensitiveContext
