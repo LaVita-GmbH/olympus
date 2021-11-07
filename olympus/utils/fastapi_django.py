@@ -1,12 +1,18 @@
+import os
 from typing import List, Optional, Union
 from enum import Enum
-from olympus.utils.sync import sync_to_async
 from psycopg2 import errorcodes as psycopg2_error_codes
 from pydantic.error_wrappers import ErrorWrapper
 from django.db.models import Q, QuerySet, Manager, aggregates
 from django.db.utils import ProgrammingError
 from fastapi.exceptions import RequestValidationError
 from .fastapi import Pagination
+
+if os.getenv('USE_ASYNCIO'):
+    from .asyncio import sync_to_async
+
+else:
+    from .sync import sync_to_async
 
 
 class AggregationFunction(Enum):

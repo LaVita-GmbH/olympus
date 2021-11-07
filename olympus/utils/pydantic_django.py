@@ -1,7 +1,7 @@
+import os
 import json
 import warnings
-import time
-from typing import Any, Callable, Coroutine, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Dict
+from typing import Coroutine, List, Mapping, Optional, Tuple, Type, TypeVar, Union
 from enum import Enum
 from django.db.models.query_utils import DeferredAttribute
 from fastapi.exceptions import RequestValidationError
@@ -12,7 +12,6 @@ from django.db.models.manager import Manager
 from django.db.models.fields.related_descriptors import ManyToManyDescriptor, ReverseManyToOneDescriptor
 from django.db.transaction import atomic
 from django.utils.functional import cached_property
-from contextvars import ContextVar
 from ..schemas import Access, Error, AccessScope
 from ..exceptions import AccessError
 from ..security.jwt import access as access_ctx
@@ -20,7 +19,12 @@ from .sentry import instrument_span, span as span_ctx
 from .django import AllowAsyncUnsafe
 from .pydantic import Reference
 from .asyncio import is_async
-from .sync import sync_to_async
+
+if os.getenv('USE_ASYNCIO'):
+    from .asyncio import sync_to_async
+
+else:
+    from .sync import sync_to_async
 
 
 class TransferAction(Enum):
