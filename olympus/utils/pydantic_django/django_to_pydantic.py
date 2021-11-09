@@ -1,7 +1,5 @@
 import os
-import inspect
 import json
-import time
 from typing import Coroutine, Mapping, Optional, Type, Union
 from functools import wraps
 from django.db.models.query_utils import DeferredAttribute
@@ -15,7 +13,6 @@ from ...schemas import AccessScope
 from ...exceptions import AccessError
 from ...security.jwt import access as access_ctx
 from ..sentry import instrument_span, span as span_ctx
-from ..django import AllowAsyncUnsafe
 from ..asyncio import is_async
 
 if os.getenv('USE_ASYNCIO'):
@@ -35,7 +32,6 @@ def transfer_from_orm(
     django_parent_obj: Optional[models.Model] = None,
     pydantic_field_on_parent: Optional[ModelField] = None,
     filter_submodel: Optional[Mapping[Manager, models.Q]] = None,
-    _async: bool = False
 ) -> Union[BaseModel, Coroutine[None, None, BaseModel]]:
     """
     Transfers the field contents of django_obj to a new instance of pydantic_cls.
@@ -56,47 +52,14 @@ def transfer_from_orm(
         name: str = Field(orm_field=Address.name)
     ```
     """
-
-    if os.getenv('TRANSFER_FROM_ORM_ASYNC') and not os.getenv('DJANGO_ALLOW_ASYNC_UNSAFE'):
-        with AllowAsyncUnsafe():
-            return transfer_from_orm(
-                pydantic_cls=pydantic_cls,
-                django_obj=django_obj,
-                filter_submodel=filter_submodel,
-            )
-
-    if is_async() and not _async:
-        if os.getenv('TRANSFER_FROM_ORM_ASYNC'):
-            async def async_wrapper(
-                pydantic_cls,
-                django_obj,
-                filter_submodel=None,
-                django_parent_obj=None,
-                pydantic_field_on_parent=None,
-            ):
-                return _transfer_from_orm(
-                    pydantic_cls=pydantic_cls,
-                    django_obj=django_obj,
-                    filter_submodel=filter_submodel,
-                    django_parent_obj=django_parent_obj,
-                    pydantic_field_on_parent=pydantic_field_on_parent,
-                    _async=True,
-                )
-
-            return async_wrapper(
-                pydantic_cls=pydantic_cls,
-                django_obj=django_obj,
-                filter_submodel=filter_submodel,
-                django_parent_obj=django_parent_obj,
-                pydantic_field_on_parent=pydantic_field_on_parent,
-            )
-
-        if not os.getenv('DJANGO_ALLOW_ASYNC_UNSAFE'):
-            return sync_to_async(transfer_from_orm)(
-                pydantic_cls=pydantic_cls,
-                django_obj=django_obj,
-                filter_submodel=filter_submodel,
-            )
+    if is_async():
+        return sync_to_async(_transfer_from_orm)(
+            pydantic_cls=pydantic_cls,
+            django_obj=django_obj,
+            django_parent_obj=django_parent_obj,
+            pydantic_field_on_parent=pydantic_field_on_parent,
+            filter_submodel=filter_submodel,
+        )
 
     return _transfer_from_orm(
         pydantic_cls=pydantic_cls,
@@ -104,29 +67,15 @@ def transfer_from_orm(
         django_parent_obj=django_parent_obj,
         pydantic_field_on_parent=pydantic_field_on_parent,
         filter_submodel=filter_submodel,
-        _async=_async,
     )
 
 
-def timer(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        res = func(*args, **kwargs)
-        print(" ".join(["" for _ in range(len(inspect.stack(0)))]), "Call to %s took %sms" % (func.__name__, (time.time() - start) * 1000))
-        return res
-
-    return wrapper
-
-
-# @timer
 def _transfer_from_orm(
     pydantic_cls: Type[BaseModel],
     django_obj: models.Model,
     django_parent_obj: Optional[models.Model] = None,
     pydantic_field_on_parent: Optional[ModelField] = None,
     filter_submodel: Optional[Mapping[Manager, models.Q]] = None,
-    _async: bool = False
 ) -> Union[BaseModel, Coroutine[None, None, BaseModel]]:
     span = span_ctx.get()
     span.set_tag('transfer_from_orm.pydantic_cls', pydantic_cls.__name__)
@@ -141,7 +90,7 @@ def _transfer_from_orm(
             if value is not None and issubclass(field.type_, BaseModel) and not isinstance(value, BaseModel):
                 if field.shape == SHAPE_SINGLETON:
                     if isinstance(value, models.Model):
-                        value = transfer_from_orm(field.type_, value, _async=_async)
+                        value = transfer_from_orm(field.type_, value)
 
                     else:
                         value = field.type_.parse_obj(value)
@@ -157,7 +106,6 @@ def _transfer_from_orm(
                                 django_obj=obj,
                                 django_parent_obj=django_obj,
                                 filter_submodel=filter_submodel,
-                                _async=_async,
                             )
 
                         return field.type_.parse_obj(obj)
@@ -214,7 +162,6 @@ def _transfer_from_orm(
                             django_parent_obj=django_obj,
                             pydantic_field_on_parent=field,
                             filter_submodel=filter_submodel,
-                            _async=_async,
                         ) for rel_obj in related_objs
                     ]
 
@@ -227,7 +174,6 @@ def _transfer_from_orm(
                     django_obj=django_obj,
                     pydantic_field_on_parent=field,
                     filter_submodel=filter_submodel,
-                    _async=_async,
                 )
 
             else:
