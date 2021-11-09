@@ -9,15 +9,30 @@ from contextvars import ContextVar
 span: ContextVar[Span] = ContextVar('span')
 
 
-def instrument_span(op: str, description: Optional[Union[str, Callable]] = None, **instrument_kwargs):
+def instrument_span(op: str, description: Optional[Union[str, Callable]] = None, force_new_span: bool = False, **instrument_kwargs):
     def wrapper(wrapped):
         @wraps(wrapped)
         def with_instrumentation(*args, **kwargs):
-            with start_span(
-                op=op,
-                description=description(*args, **kwargs) if callable(description) else description,
-                **instrument_kwargs,
-            ) as _span:
+            try:
+                parent_span = span.get()
+
+            except LookupError:
+                parent_span = None
+
+            if parent_span and not force_new_span:
+                _span = parent_span.start_child(
+                    description=description(*args, **kwargs) if callable(description) else description,
+                    **instrument_kwargs,
+                )
+
+            else:
+                _span = start_span(
+                    op=op,
+                    description=description(*args, **kwargs) if callable(description) else description,
+                    **instrument_kwargs,
+                )
+
+            with _span:
                 try:
                     _span.set_data("threading.current_thread", threading.current_thread().getName())
 
