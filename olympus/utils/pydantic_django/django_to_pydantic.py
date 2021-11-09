@@ -119,7 +119,7 @@ def timer(func):
     return wrapper
 
 
-@timer
+# @timer
 def _transfer_from_orm(
     pydantic_cls: Type[BaseModel],
     django_obj: models.Model,
