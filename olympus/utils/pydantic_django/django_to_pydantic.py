@@ -1,7 +1,6 @@
 import os
 import json
 from typing import Coroutine, Mapping, Optional, Type, Union
-from functools import wraps
 from django.db.models.query_utils import DeferredAttribute
 from pydantic import BaseModel, parse_obj_as
 from pydantic.fields import ModelField, SHAPE_SINGLETON, SHAPE_LIST
@@ -90,7 +89,10 @@ def _transfer_from_orm(
             if value is not None and issubclass(field.type_, BaseModel) and not isinstance(value, BaseModel):
                 if field.shape == SHAPE_SINGLETON:
                     if isinstance(value, models.Model):
-                        value = transfer_from_orm(field.type_, value)
+                        value = _transfer_from_orm(
+                            pydantic_cls=field.type_,
+                            django_obj=value,
+                        )
 
                     else:
                         value = field.type_.parse_obj(value)
@@ -101,7 +103,7 @@ def _transfer_from_orm(
                             return obj
 
                         if isinstance(obj, models.Model):
-                            return transfer_from_orm(
+                            return _transfer_from_orm(
                                 pydantic_cls=field.type_,
                                 django_obj=obj,
                                 django_parent_obj=django_obj,
@@ -156,7 +158,7 @@ def _transfer_from_orm(
                         raise NotImplementedError
 
                     values[field.name] = [
-                        transfer_from_orm(
+                        _transfer_from_orm(
                             pydantic_cls=field.type_,
                             django_obj=rel_obj,
                             django_parent_obj=django_obj,
@@ -169,7 +171,7 @@ def _transfer_from_orm(
                     raise NotImplementedError
 
             elif not orm_field and issubclass(field.type_, BaseModel):
-                values[field.name] = transfer_from_orm(
+                values[field.name] = _transfer_from_orm(
                     pydantic_cls=field.type_,
                     django_obj=django_obj,
                     pydantic_field_on_parent=field,
