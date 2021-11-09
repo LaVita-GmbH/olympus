@@ -7,7 +7,7 @@ from django.dispatch import receiver, Signal
 from django.db.models.signals import post_save, post_delete
 from django.db import models
 from ..utils.pydantic_django import transfer_from_orm
-from ..utils.sentry import instrument_span, span as span_ctx
+from ..utils.sentry import instrument_span, span as span_ctx, capture_exception
 from ..schemas import DataChangeEvent, EventMetadata
 from ..utils.typing import with_typehint
 from ..utils.django import on_transaction_complete
@@ -131,6 +131,7 @@ class EventPublisher:
             'max_retries': 3,
         }
 
+    @capture_exception
     def process(self):
         span = span_ctx.get()
         span.set_tag('exchange', self.exchange)

@@ -1,7 +1,7 @@
 import threading
 from functools import wraps
 from typing import Callable, Optional, Union
-from sentry_sdk import start_span
+from sentry_sdk import start_span, capture_exception as sentry_capture_exception
 from sentry_sdk.tracing import Span
 from contextvars import ContextVar
 
@@ -46,3 +46,22 @@ def instrument_span(op: str, description: Optional[Union[str, Callable]] = None,
         return with_instrumentation
 
     return wrapper
+
+
+def capture_exception(func: Optional[Callable] = None):
+    def _capture_exception(func: Callable):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+
+            except Exception as error:
+                sentry_capture_exception(error)
+                raise
+
+        return wrapper
+
+    if func:
+        return _capture_exception(func)
+
+    return _capture_exception
