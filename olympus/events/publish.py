@@ -50,7 +50,6 @@ class EventPublisher:
             cls.exchange: Exchange = exchange
 
         cls.connection = connection
-        cls.producer = cls.connection.Producer(exchange=cls.exchange)
 
         cls.orm_model = orm_model
         cls.event_schema = event_schema
@@ -141,7 +140,7 @@ class EventPublisher:
         span.set_tag('orm_model', self.orm_model)
 
         self.logger.debug("Publish DataChangeEvent for %s with schema %s on %r", self.orm_model, self.event_schema, self.exchange)
-        self.producer.publish(
+        self.connection.Producer(exchange=self.exchange).publish(
             retry=True,
             retry_policy=self.get_retry_policy(),
             body=self.get_body().json(),
