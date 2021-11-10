@@ -1,7 +1,7 @@
 import threading
 from functools import wraps
-from typing import Callable, Optional, Union
-from sentry_sdk import start_span, capture_exception as sentry_capture_exception
+from typing import Callable, Optional, Union, List
+from sentry_sdk import start_span, capture_exception as sentry_capture_exception, set_tag
 from sentry_sdk.tracing import Span
 from contextvars import ContextVar
 
@@ -56,6 +56,7 @@ def capture_exception(func: Optional[Callable] = None):
                 return func(*args, **kwargs)
 
             except Exception as error:
+                set_tag('capture_exception.function', f'{func.__module__}.{func.__qualname__}')
                 sentry_capture_exception(error)
                 raise
 
