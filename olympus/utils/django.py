@@ -1,6 +1,6 @@
 import os
 import logging
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from asyncio import Future
 from inspect import CO_COROUTINE
 from functools import wraps
@@ -89,11 +89,13 @@ def on_transaction_complete(awaitable: bool = False, callback: Optional[Callable
                         _logger.exception(error, exc_info=True, stack_info=True)
                         raise
 
+            context = copy_context()
+
             if not transaction.get_connection().in_atomic_block:
-                call()
+                context.run(call)
 
             else:
-                transaction.on_commit(call)
+                transaction.on_commit(lambda: context.run(call))
 
             return future
 
